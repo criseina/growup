@@ -117,3 +117,15 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+
+# GrowUp app workspace files.
+.idea/
+*.iml
+
+# The app's Android wrapper is required to build from a fresh checkout.
+!android/gradlew
+!android/gradlew.bat
+!android/gradle/wrapper/gradle-wrapper.jar
+
+# Flutter applications commit their resolved package graph.
+!pubspec.lock

@@ -24,15 +24,26 @@
 | image | 이미지 파일명 |
 | childTitle | 아이에게 보여줄 제목 |
 | parentGuide | 부모 가이드 |
-| status | 혼자 / 같이 / 안 해봤어요 |
-| prerequisite | 선행 행동 |
-| nextActions | 추천 행동 |
+| contentStatus | Draft / Review / Complete |
+| prerequisiteCardIds | 선행 기술 카드 ID 목록 |
+| nextActionCardIds | 권장 다음 행동 카드 ID 목록 |
 | tags | 검색 태그 |
 | version | 데이터 버전 |
 
 ---
 
-# 상태 정의
+# 카드 원본과 관찰 기록의 분리
+
+카드의 작성 상태와 아이의 관찰 상태는 같은 `status`가 아니다. 카드 원본에는 `contentStatus`만 저장한다. 아이가 선택한 상태는 별도 관찰 기록에 저장한다.
+
+| 관찰 기록 필드 | 설명 |
+|---|---|
+| cardId | 관찰한 카드 ID |
+| observedAt | 관찰 시각 |
+| independenceLevel | independent / withSupport / notYet |
+| note | 선택적인 부모 관찰 메모 |
+
+# 관찰 상태 정의
 
 ## 🟢 혼자
 

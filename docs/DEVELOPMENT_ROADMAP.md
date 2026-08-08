@@ -16,7 +16,7 @@
 - [x] ACTION_CARD_LIBRARY_MASTER
 - [x] UI_UX_GUIDE
 - [x] DATA_MODEL
-- [ ] DEVELOPMENT_ROADMAP
+- [x] DEVELOPMENT_ROADMAP
 
 ---
 
@@ -24,9 +24,9 @@
 
 목표
 
-- Action Card Library 100% 완성
-- 카드 작성 규칙 확정
-- 카드 검토 완료
+- 필수 행동 기반 Action Tree v1 확정
+- 중복·하위 행동 제거 규칙 확정
+- 최초 카드 26장의 부모 검토 완료
 
 ---
 
@@ -35,7 +35,8 @@
 목표
 
 - 모든 Action Card를 JSON으로 변환
-- 데이터 검증
+- 카드 원본과 관찰 기록을 분리
+- 선행 기술·권장 다음 행동 연결 검증
 
 ---
 
@@ -43,11 +44,10 @@
 
 목표
 
-- 프로젝트 생성
-- UI 구현
-- 상태 저장
-- 부모 모드
-- 아이 모드
+- Flutter 프로젝트 생성
+- 로컬 JSON 카드 로드와 기기 내 상태 저장
+- 아이 모드와 부모 모드 구현
+- 서버·계정·동기화는 실제 사용 검증 뒤 결정
 
 ---
 

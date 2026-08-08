@@ -57,9 +57,9 @@ GrowUp은 아이를 평가하는 앱이 아니다.
 
 # Current Goal
 
-Action Card Library v1.0
+필수 행동 기반의 Action Tree v1 완성
 
-120장의 Action Card 완성
+카드 수를 목표로 하지 않는다. 중복되지 않고 아이가 독립적으로 관찰·선택할 수 있는 필수 행동만 카드로 만든다.
 
 ---
 
@@ -67,4 +67,4 @@ Action Card Library v1.0
 
 기능보다 콘텐츠를 먼저 만든다.
 
-Action Library를 완성한 뒤 앱을 개발한다.
+Action Tree와 카드 원본을 검토한 뒤 앱을 개발한다.
