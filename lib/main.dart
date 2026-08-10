@@ -384,12 +384,6 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     );
   }
 
-  String _levelLabel(IndependenceLevel level) => switch (level) {
-    IndependenceLevel.independent => '🟢 혼자 해봤어요',
-    IndependenceLevel.withSupport => '🟡 같이 해봤어요',
-    IndependenceLevel.notYet => '⚪ 아직 안 해봤어요',
-  };
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -416,7 +410,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
           final cards = snapshot.data!;
           final cardById = {for (final card in cards) card.id: card};
           final visibleCards = _selectedCategory == null
-              ? cards
+              ? <ActionCard>[]
               : cards
                     .where((card) => card.category == _selectedCategory)
                     .toList();
@@ -430,75 +424,52 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
+              if (_selectedCategory == null)
+                Expanded(
+                  child: GridView.count(
+                    padding: const EdgeInsets.all(20),
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 14,
+                    crossAxisSpacing: 14,
                     children: [
-                      ChoiceChip(
-                        label: const Text('전체'),
-                        selected: _selectedCategory == null,
-                        onSelected: (_) =>
-                            setState(() => _selectedCategory = null),
-                      ),
                       for (final entry in categoryLabels.entries)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: ChoiceChip(
-                            label: Text(entry.value),
-                            selected: _selectedCategory == entry.key,
-                            onSelected: (_) =>
-                                setState(() => _selectedCategory = entry.key),
-                          ),
+                        _CategoryTile(
+                          title: entry.value,
+                          icon: _categoryIcon(entry.key),
+                          onTap: () =>
+                              setState(() => _selectedCategory = entry.key),
                         ),
                     ],
                   ),
+                )
+              else ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _selectedCategory = null),
+                    icon: const Icon(Icons.arrow_back),
+                    label: Text(categoryLabels[_selectedCategory]!),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: visibleCards.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final card = visibleCards[index];
-                    final level = _levels[card.id];
-                    return Card(
-                      clipBehavior: Clip.antiAlias,
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(18),
-                        leading: CircleAvatar(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primaryContainer,
-                          child: Icon(_categoryIcon(card.category)),
-                        ),
-                        title: Text(
-                          _parentMode ? card.title : card.childTitle,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            _parentMode
-                                ? level == null
-                                      ? '아직 기록이 없어요 · 눌러서 가이드를 봐요'
-                                      : _levelLabel(level)
-                                : level == null
-                                ? '눌러서 상태를 골라요'
-                                : _levelLabel(level),
-                          ),
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                    itemCount: visibleCards.length,
+                    itemBuilder: (context, index) {
+                      final card = visibleCards[index];
+                      return _TreeCard(
+                        card: card,
+                        level: _levels[card.id],
+                        parentMode: _parentMode,
+                        isLast: index == visibleCards.length - 1,
                         onTap: () => _parentMode
                             ? _showParentGuide(card, cardById)
                             : _selectLevel(card),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
+              ],
             ],
           );
         },
@@ -540,6 +511,108 @@ class _RelatedActions extends StatelessWidget {
       ],
     );
   }
+}
+
+class _CategoryTile extends StatelessWidget {
+  const _CategoryTile({
+    required this.title,
+    required this.icon,
+    required this.onTap,
+  });
+  final String title;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 30,
+              backgroundColor: const Color(0xffe5f5dc),
+              child: Icon(icon, size: 30),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _TreeCard extends StatelessWidget {
+  const _TreeCard({
+    required this.card,
+    required this.level,
+    required this.parentMode,
+    required this.isLast,
+    required this.onTap,
+  });
+  final ActionCard card;
+  final IndependenceLevel? level;
+  final bool parentMode;
+  final bool isLast;
+  final VoidCallback onTap;
+
+  String get _status => switch (level) {
+    IndependenceLevel.independent => '🟢 혼자',
+    IndependenceLevel.withSupport => '🟡 같이',
+    IndependenceLevel.notYet => '⚪ 안 해봤어요',
+    null => '아직 기록이 없어요',
+  };
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 30,
+        child: Column(
+          children: [
+            const SizedBox(height: 28),
+            const CircleAvatar(radius: 7, backgroundColor: Color(0xff55ae52)),
+            if (!isLast)
+              const SizedBox(
+                height: 100,
+                child: VerticalDivider(
+                  width: 2,
+                  thickness: 2,
+                  color: Color(0xffd9ead2),
+                ),
+              ),
+          ],
+        ),
+      ),
+      Expanded(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Card(
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(16),
+              title: Text(
+                parentMode ? card.title : card.childTitle,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              subtitle: Text(_status),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: onTap,
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 class ChildCardPage extends StatefulWidget {

@@ -17,6 +17,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('오늘 어떤 행동을 해볼까요?'), findsOneWidget);
+    await tester.tap(find.text('개인 위생'));
+    await tester.pumpAndSettle();
     expect(find.text('손을 씻어요'), findsOneWidget);
   });
 }
