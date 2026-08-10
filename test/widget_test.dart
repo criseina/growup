@@ -45,7 +45,7 @@ void main() {
     await tester.pumpWidget(const GrowUpApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('오늘 어떤 걸\n해볼까?'), findsOneWidget);
+    expect(find.text('오늘 어떤 걸 해볼까?'), findsOneWidget);
     expect(find.text('행동 고르기'), findsOneWidget);
     expect(find.text('성장 기록'), findsOneWidget);
   });

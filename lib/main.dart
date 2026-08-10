@@ -228,11 +228,17 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
             const SizedBox(height: 20),
-            Text(
-              '오늘 어떤 걸\n해볼까?',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                height: 1.15,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '오늘 어떤 걸 해볼까?',
+                maxLines: 1,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontSize: 29,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -987,7 +993,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     ActionCard card,
     Map<String, ActionCard> cardById,
   ) async {
-    final selected = await Navigator.of(context).push<IndependenceLevel>(
+    await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => ChildCardPage(
           card: card,
@@ -1001,12 +1007,10 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
               ),
             ),
           ),
+          onLevelSelected: (level) => _saveLevel(card, level),
         ),
       ),
     );
-    if (selected != null) {
-      await _saveLevel(card, selected);
-    }
   }
 
   void _showParentGuide(ActionCard card, Map<String, ActionCard> cardById) {
