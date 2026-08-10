@@ -987,13 +987,13 @@ class ActionIllustration extends StatelessWidget {
     borderRadius: BorderRadius.circular(28),
     child: ColoredBox(
       color: const Color(0xfff4f0e8),
-      child: card.id == 'H-01'
-          ? Image.asset(
-              'assets/illustrations/h-01-wash-hands.png',
+      child: _assetPath == null
+          ? _fallback()
+          : Image.asset(
+              _assetPath!,
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => _fallback(),
-            )
-          : _fallback(),
+            ),
     ),
   );
 
@@ -1004,6 +1004,12 @@ class ActionIllustration extends StatelessWidget {
       color: const Color(0xff478bc2),
     ),
   );
+
+  String? get _assetPath => switch (card.id) {
+    'H-01' => 'assets/illustrations/h-01-wash-hands.png',
+    'H-03' => 'assets/illustrations/h-03-wash-face.png',
+    _ => null,
+  };
   IconData _iconFor(String category) => switch (category) {
     'hygiene' => Icons.soap_outlined,
     'dressing' => Icons.checkroom_outlined,

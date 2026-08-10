@@ -61,6 +61,7 @@ flutter:
   assets:
     - data/action_cards_v1.json
     - assets/illustrations/h-01-wash-hands.png
+    - assets/illustrations/h-03-wash-face.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
