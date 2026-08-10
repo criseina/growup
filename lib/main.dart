@@ -73,6 +73,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _profiles = ProfileRepository();
   ChildProfile _activeProfile = ProfileRepository.defaultProfile;
+  ActionCard? _recommendation;
+  String _recommendationReason = '오늘 새로 해볼 행동이에요.';
 
   @override
   void initState() {
@@ -83,6 +85,38 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadProfile() async {
     final profile = await _profiles.loadActiveProfile();
     if (mounted) setState(() => _activeProfile = profile);
+    await _loadRecommendation(profile);
+  }
+
+  Future<void> _loadRecommendation(ChildProfile profile) async {
+    final raw = await rootBundle.loadString('data/action_cards_v1.json');
+    final cards =
+        ((jsonDecode(raw) as Map<String, dynamic>)['cards'] as List<dynamic>)
+            .cast<Map<String, dynamic>>()
+            .map(ActionCard.fromJson)
+            .toList();
+    final preferences = await SharedPreferences.getInstance();
+    final saved = preferences.getString('action_card_levels_v1_${profile.id}');
+    final levels = saved == null
+        ? <String, String>{}
+        : Map<String, String>.from(jsonDecode(saved) as Map<String, dynamic>);
+    final candidate = cards.cast<ActionCard?>().firstWhere(
+      (card) =>
+          card != null &&
+          levels[card.id] != 'independent' &&
+          card.prerequisiteCardIds.every((id) => levels[id] == 'independent'),
+      orElse: () => cards.first,
+    );
+    if (candidate == null || !mounted) return;
+    final currentLevel = levels[candidate.id];
+    setState(() {
+      _recommendation = candidate;
+      _recommendationReason = currentLevel == 'withSupport'
+          ? '함께 해본 행동이에요. 오늘은 조금 더 스스로 해볼까요?'
+          : currentLevel == 'notYet'
+          ? '아직 낯선 행동이에요. 부담 없이 한 단계만 해봐요.'
+          : '오늘 처음 해볼 행동이에요.';
+    });
   }
 
   @override
@@ -121,6 +155,20 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 14),
             const Text('잘했는지 평가하지 않아요. 오늘 해보고 싶은 행동을 골라요.'),
             const SizedBox(height: 32),
+            if (_recommendation != null)
+              _TodayRecommendation(
+                card: _recommendation!,
+                reason: _recommendationReason,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ActionLibraryPage(
+                      profileId: _activeProfile.id,
+                      initialCategory: _recommendation!.category,
+                    ),
+                  ),
+                ),
+              ),
+            if (_recommendation != null) const SizedBox(height: 14),
             _HomeAction(
               icon: Icons.auto_awesome,
               title: '오늘 해볼 행동',
@@ -161,6 +209,60 @@ class _HomePageState extends State<HomePage> {
                 label: const Text('부모 모드'),
               ),
             ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _TodayRecommendation extends StatelessWidget {
+  const _TodayRecommendation({
+    required this.card,
+    required this.reason,
+    required this.onTap,
+  });
+
+  final ActionCard card;
+  final String reason;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    color: const Color(0xffeff8e9),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const CircleAvatar(
+              backgroundColor: Color(0xff55ae52),
+              foregroundColor: Colors.white,
+              child: Icon(Icons.auto_awesome),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '오늘의 추천 행동',
+                    style: TextStyle(
+                      color: Color(0xff28753c),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    card.childTitle,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  Text(reason),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right),
           ],
         ),
       ),
@@ -231,6 +333,7 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
   Map<String, ActionCard> _cardsById = {};
   String? _categoryFilter;
   String? _levelFilter;
+  int? _periodDays;
 
   List<Map<String, dynamic>> get _filteredRecords => _records.where((record) {
     final card = _cardsById[record['cardId']];
@@ -238,11 +341,18 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
         _categoryFilter == null || card?.category == _categoryFilter;
     final levelMatches =
         _levelFilter == null || record['level'] == _levelFilter;
-    return categoryMatches && levelMatches;
+    final observedAt = DateTime.tryParse(record['observedAt'] as String);
+    final periodMatches =
+        _periodDays == null ||
+        (observedAt != null &&
+            !observedAt.isBefore(
+              DateTime.now().subtract(Duration(days: _periodDays!)),
+            ));
+    return categoryMatches && levelMatches && periodMatches;
   }).toList();
 
   int _countFor(String level) =>
-      _records.where((record) => record['level'] == level).length;
+      _filteredRecords.where((record) => record['level'] == level).length;
 
   @override
   void initState() {
@@ -300,7 +410,7 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _RecordSummary(
-                total: _records.length,
+                total: _filteredRecords.length,
                 independent: _countFor('independent'),
                 withSupport: _countFor('withSupport'),
                 notYet: _countFor('notYet'),
@@ -316,6 +426,14 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
                       onSelected: (_) => setState(() => _categoryFilter = null),
                     ),
                     const SizedBox(width: 6),
+                    for (final period in const <int?>[null, 7, 30]) ...[
+                      FilterChip(
+                        label: Text(period == null ? '전체 기간' : '최근 $period일'),
+                        selected: _periodDays == period,
+                        onSelected: (_) => setState(() => _periodDays = period),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
                     for (final category
                         in _cardsById.values
                             .map((card) => card.category)
@@ -511,9 +629,11 @@ class ActionLibraryPage extends StatefulWidget {
     super.key,
     this.parentMode = false,
     this.profileId = ProfileRepository.defaultProfileId,
+    this.initialCategory,
   });
   final bool parentMode;
   final String profileId;
+  final String? initialCategory;
 
   @override
   State<ActionLibraryPage> createState() => _ActionLibraryPageState();
@@ -540,6 +660,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
   @override
   void initState() {
     super.initState();
+    _selectedCategory = widget.initialCategory;
     _loadProgress();
   }
 
