@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,5 +48,36 @@ void main() {
     expect(find.text('오늘 어떤 걸\n해볼까?'), findsOneWidget);
     expect(find.text('행동 고르기'), findsOneWidget);
     expect(find.text('성장 기록'), findsOneWidget);
+  });
+
+  testWidgets('opens parent mode after a left swipe on a child card', (
+    WidgetTester tester,
+  ) async {
+    var openedParentMode = false;
+    const card = ActionCard(
+      id: 'H-01',
+      category: 'hygiene',
+      title: '손 씻기',
+      childTitle: '손을 씻어요',
+      parentGuide: '',
+      prerequisiteCardIds: [],
+      nextActionCardIds: [],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChildCardPage(
+          card: card,
+          initialLevel: null,
+          onOpenParentMode: () => openedParentMode = true,
+        ),
+      ),
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey('child-card-swipe-area')),
+      const Offset(-260, 0),
+    );
+    expect(openedParentMode, isTrue);
   });
 }

@@ -195,12 +195,12 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 18),
+            const SizedBox(height: 6),
             Row(
               children: [
                 Text('GrowUp', style: Theme.of(context).textTheme.titleLarge),
@@ -227,41 +227,48 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
-            const SizedBox(height: 34),
+            const SizedBox(height: 20),
             Text(
               '오늘 어떤 걸\n해볼까?',
-              style: Theme.of(context).textTheme.displaySmall,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                height: 1.15,
+              ),
             ),
-            const SizedBox(height: 14),
-            const Text('잘했는지 평가하지 않아요. 오늘 해보고 싶은 행동을 골라요.'),
-            const SizedBox(height: 32),
+            const SizedBox(height: 10),
+            const Text('잘했는지 평가하지 않아요.\n오늘 해보고 싶은 행동을 골라요.'),
+            const SizedBox(height: 16),
             if (_recommendation != null)
-              _TodayRecommendation(
-                card: _recommendation!,
-                reason: _recommendationReason,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ChildCardPage(
-                      card: _recommendation!,
-                      initialLevel: null,
-                      onOpenParentMode: () =>
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(
-                              builder: (_) => ParentCardPage(
-                                card: _recommendation!,
-                                cardById: _recommendationCardsById,
-                                profileId: _activeProfile.id,
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: _TodayRecommendation(
+                    card: _recommendation!,
+                    reason: _recommendationReason,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ChildCardPage(
+                          card: _recommendation!,
+                          initialLevel: null,
+                          onOpenParentMode: () =>
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(
+                                  builder: (_) => ParentCardPage(
+                                    card: _recommendation!,
+                                    cardById: _recommendationCardsById,
+                                    profileId: _activeProfile.id,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                      onLevelSelected: (level) {
-                        _saveRecommendationLevel(_recommendation!, level);
-                      },
+                          onLevelSelected: (level) {
+                            _saveRecommendationLevel(_recommendation!, level);
+                          },
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            if (_recommendation != null) const SizedBox(height: 14),
           ],
         ),
       ),
@@ -916,7 +923,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
   late final Future<List<ActionCard>> _cardsFuture = _loadCards();
   final Map<String, IndependenceLevel> _levels = {};
   String? _selectedCategory;
-  late bool _parentMode = widget.parentMode;
+  late final bool _parentMode = widget.parentMode;
   bool _isLoadingProgress = true;
 
   @override
@@ -1020,13 +1027,6 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
       appBar: AppBar(
         title: Text(_parentMode ? 'GrowUp 부모 모드' : '행동 고르기'),
         centerTitle: false,
-        actions: [
-          TextButton.icon(
-            onPressed: () => setState(() => _parentMode = !_parentMode),
-            icon: Icon(_parentMode ? Icons.child_care : Icons.family_restroom),
-            label: Text(_parentMode ? '아이 모드' : '부모 모드'),
-          ),
-        ],
       ),
       body: FutureBuilder<List<ActionCard>>(
         future: _cardsFuture,
@@ -1313,6 +1313,7 @@ class ChildCardPage extends StatefulWidget {
 
 class _ChildCardPageState extends State<ChildCardPage> {
   late IndependenceLevel? _selected = widget.initialLevel;
+  double _horizontalDragDistance = 0;
 
   void _select(IndependenceLevel level) {
     setState(() => _selected = level);
@@ -1326,60 +1327,64 @@ class _ChildCardPageState extends State<ChildCardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      onHorizontalDragEnd: (details) {
-                        if (details.primaryVelocity != null &&
-                            details.primaryVelocity! < -180) {
-                          widget.onOpenParentMode?.call();
-                        }
-                      },
-                      child: const _ProgressDots(),
+      body: GestureDetector(
+        key: const ValueKey('child-card-swipe-area'),
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => _horizontalDragDistance = 0,
+        onHorizontalDragUpdate: (details) {
+          _horizontalDragDistance += details.delta.dx;
+        },
+        onHorizontalDragEnd: (details) {
+          if ((details.primaryVelocity ?? 0) < -180 ||
+              _horizontalDragDistance < -80) {
+            widget.onOpenParentMode?.call();
+          }
+        },
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back),
                     ),
-                  ),
-                  const Icon(Icons.star_rounded, color: Color(0xffffc943)),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ActionIllustration(card: widget.card, large: true),
-              ),
-              Text(
-                widget.card.childTitle,
-                style: Theme.of(context).textTheme.displaySmall,
-              ),
-              const SizedBox(height: 28),
-              Row(
-                children: [
-                  _ChildStatusButton(
-                    level: IndependenceLevel.independent,
-                    selected: _selected,
-                    onTap: () => _select(IndependenceLevel.independent),
-                  ),
-                  _ChildStatusButton(
-                    level: IndependenceLevel.withSupport,
-                    selected: _selected,
-                    onTap: () => _select(IndependenceLevel.withSupport),
-                  ),
-                  _ChildStatusButton(
-                    level: IndependenceLevel.notYet,
-                    selected: _selected,
-                    onTap: () => _select(IndependenceLevel.notYet),
-                  ),
-                ],
-              ),
-            ],
+                    const Expanded(child: _ProgressDots()),
+                    const Icon(Icons.star_rounded, color: Color(0xffffc943)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ActionIllustration(card: widget.card, large: true),
+                ),
+                Text(
+                  widget.card.childTitle,
+                  style: Theme.of(context).textTheme.displaySmall,
+                ),
+                const SizedBox(height: 28),
+                Row(
+                  children: [
+                    _ChildStatusButton(
+                      level: IndependenceLevel.independent,
+                      selected: _selected,
+                      onTap: () => _select(IndependenceLevel.independent),
+                    ),
+                    _ChildStatusButton(
+                      level: IndependenceLevel.withSupport,
+                      selected: _selected,
+                      onTap: () => _select(IndependenceLevel.withSupport),
+                    ),
+                    _ChildStatusButton(
+                      level: IndependenceLevel.notYet,
+                      selected: _selected,
+                      onTap: () => _select(IndependenceLevel.notYet),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
