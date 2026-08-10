@@ -409,7 +409,7 @@ class _TodayRecommendation extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -423,29 +423,29 @@ class _TodayRecommendation extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             SizedBox(
-              height: 190,
+              height: 128,
               width: double.infinity,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: ActionIllustration(card: card, large: true),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 6),
             Text(
               card.childTitle,
-              style: Theme.of(context).textTheme.headlineSmall,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
+            const SizedBox(height: 2),
+            Text(reason, textAlign: TextAlign.center, maxLines: 2),
             const SizedBox(height: 4),
-            Text(reason, textAlign: TextAlign.center),
-            const SizedBox(height: 8),
             const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.touch_app_outlined, size: 18),
-                SizedBox(width: 6),
-                Text('눌러서 아이 모드로 선택하기'),
+                Icon(Icons.touch_app_outlined, size: 16),
+                SizedBox(width: 4),
+                Text('눌러서 아이 모드로 선택하기', style: TextStyle(fontSize: 12)),
               ],
             ),
           ],
