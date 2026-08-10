@@ -10,7 +10,7 @@ import 'package:growup/profile_repository.dart';
 
 void main() {
   test('creates a default child profile', () async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'onboarding_completed_v1': true});
     final profiles = await ProfileRepository().loadProfiles();
 
     expect(profiles, hasLength(1));
@@ -30,7 +30,7 @@ void main() {
   });
 
   testWidgets('renders the home screen', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'onboarding_completed_v1': true});
 
     await tester.pumpWidget(const GrowUpApp());
     await tester.pumpAndSettle();

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'card_detail_content.dart';
+import 'onboarding_page.dart';
 import 'profile_page.dart';
 import 'profile_repository.dart';
 
@@ -30,8 +31,47 @@ class GrowUpApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xfffffbf5),
         useMaterial3: true,
       ),
-      home: const HomePage(),
+      home: const _AppEntry(),
     );
+  }
+}
+
+class _AppEntry extends StatefulWidget {
+  const _AppEntry();
+
+  @override
+  State<_AppEntry> createState() => _AppEntryState();
+}
+
+class _AppEntryState extends State<_AppEntry> {
+  bool? _isOnboardingComplete;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(
+        () => _isOnboardingComplete =
+            preferences.getBool('onboarding_completed_v1') ?? false,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isOnboardingComplete == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    return _isOnboardingComplete!
+        ? const HomePage()
+        : OnboardingPage(
+            onComplete: () => setState(() => _isOnboardingComplete = true),
+          );
   }
 }
 
@@ -392,6 +432,119 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
     }
   }
 
+  Future<void> _editRecord(Map<String, dynamic> record) async {
+    var selectedLevel = record['level'] as String;
+    final noteController = TextEditingController(
+      text: record['note'] as String? ?? '',
+    );
+    final updated = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('관찰 기록 수정'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final level in const [
+                    'independent',
+                    'withSupport',
+                    'notYet',
+                  ])
+                    ChoiceChip(
+                      label: Text(_level(level)),
+                      selected: selectedLevel == level,
+                      onSelected: (_) =>
+                          setDialogState(() => selectedLevel = level),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteController,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: '관찰 메모 (선택)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('취소'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, {
+                ...record,
+                'level': selectedLevel,
+                'note': noteController.text.trim(),
+              }),
+              child: const Text('저장'),
+            ),
+          ],
+        ),
+      ),
+    );
+    noteController.dispose();
+    if (updated == null) return;
+    await _persistRecordChange(record, updated);
+  }
+
+  Future<void> _deleteRecord(Map<String, dynamic> record) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('기록을 삭제할까요?'),
+        content: const Text('삭제한 기록은 되돌릴 수 없어요.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _persistRecordChange(record, null);
+  }
+
+  Future<void> _persistRecordChange(
+    Map<String, dynamic> original,
+    Map<String, dynamic>? updated,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final raw = preferences.getString('action_observations_v1');
+    if (raw == null) return;
+    final records = (jsonDecode(raw) as List<dynamic>)
+        .cast<Map<String, dynamic>>()
+        .toList();
+    final index = records.indexWhere(
+      (item) =>
+          item['cardId'] == original['cardId'] &&
+          item['observedAt'] == original['observedAt'] &&
+          (item['profileId'] ?? ProfileRepository.defaultProfileId) ==
+              widget.profileId,
+    );
+    if (index == -1) return;
+    if (updated == null) {
+      records.removeAt(index);
+    } else {
+      records[index] = updated;
+    }
+    await preferences.setString('action_observations_v1', jsonEncode(records));
+    await _load();
+  }
+
   String _level(String value) => switch (value) {
     'independent' => '🟢 혼자 해봤어요',
     'withSupport' => '🟡 같이 해봤어요',
@@ -518,8 +671,26 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
                   _cardsById[record['cardId']]?.title ??
                       record['cardId'] as String,
                 ),
-                subtitle: Text('${_level(record['level'] as String)}\n$time'),
-                trailing: const Icon(Icons.chevron_right),
+                subtitle: Text(
+                  '${_level(record['level'] as String)}\n$time'
+                  '${(record['note'] as String? ?? '').isEmpty ? '' : '\n${record['note']}'}',
+                ),
+                trailing: PopupMenuButton<_RecordMenuAction>(
+                  icon: const Icon(Icons.more_vert),
+                  onSelected: (action) => action == _RecordMenuAction.edit
+                      ? _editRecord(record)
+                      : _deleteRecord(record),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: _RecordMenuAction.edit,
+                      child: Text('수정'),
+                    ),
+                    PopupMenuItem(
+                      value: _RecordMenuAction.delete,
+                      child: Text('삭제'),
+                    ),
+                  ],
+                ),
               );
             },
           ),
@@ -587,6 +758,8 @@ class _SummaryCount extends StatelessWidget {
     ),
   );
 }
+
+enum _RecordMenuAction { edit, delete }
 
 enum IndependenceLevel { independent, withSupport, notYet }
 
