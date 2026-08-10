@@ -9,6 +9,15 @@ import 'package:growup/main.dart';
 import 'package:growup/profile_repository.dart';
 
 void main() {
+  testWidgets('shows onboarding on first launch', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(const GrowUpApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('작은 시도를 함께 기록해요'), findsOneWidget);
+  });
+
   test('creates a default child profile', () async {
     SharedPreferences.setMockInitialValues({'onboarding_completed_v1': true});
     final profiles = await ProfileRepository().loadProfiles();

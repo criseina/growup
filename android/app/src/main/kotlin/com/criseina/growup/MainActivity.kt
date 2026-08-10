@@ -1,4 +1,4 @@
-package com.example.growup
+package com.criseina.growup
 
 import io.flutter.embedding.android.FlutterActivity
 
