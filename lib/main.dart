@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'card_detail_content.dart';
 import 'about_page.dart';
+import 'growth_reward_pages.dart';
+import 'growth_reward_repository.dart';
 import 'onboarding_page.dart';
 import 'profile_page.dart';
 import 'profile_repository.dart';
@@ -162,7 +164,7 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> _saveRecommendationLevel(
+  Future<GrowthUnlockResult?> _saveRecommendationLevel(
     ActionCard card,
     IndependenceLevel level,
   ) async {
@@ -173,6 +175,7 @@ class _HomePageState extends State<HomePage> {
     final levels = saved == null
         ? <String, dynamic>{}
         : Map<String, dynamic>.from(jsonDecode(saved) as Map<String, dynamic>);
+    final previous = levels[card.id] as String?;
     levels[card.id] = level.name;
     await preferences.setString(
       '${levelKey}_${_activeProfile.id}',
@@ -189,7 +192,54 @@ class _HomePageState extends State<HomePage> {
       'observedAt': DateTime.now().toIso8601String(),
     });
     await preferences.setString(historyKey, jsonEncode(history));
+    GrowthUnlockResult? result;
+    if (level == IndependenceLevel.independent && previous != 'independent') {
+      result = await GrowthRewardRepository().unlockFirstIndependent(
+        profileId: _activeProfile.id,
+        cardId: card.id,
+      );
+    }
     await _loadRecommendation(_activeProfile);
+    return result;
+  }
+
+  void _openGrowthStudio() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.face_retouching_natural),
+              title: const Text('내 아바타'),
+              subtitle: const Text('잠금 해제한 아이템으로 꾸며요'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => AvatarPage(profileId: _activeProfile.id),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.weekend_outlined),
+              title: const Text('내 공간 꾸미기'),
+              subtitle: const Text('성장 아이템을 공간에 놓아요'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => SpacePage(profileId: _activeProfile.id),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -211,6 +261,11 @@ class _HomePageState extends State<HomePage> {
                   ).push(MaterialPageRoute(builder: (_) => const AboutPage())),
                   icon: const Icon(Icons.info_outline),
                   tooltip: 'GrowUp 안내',
+                ),
+                IconButton(
+                  onPressed: _openGrowthStudio,
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  tooltip: '성장 꾸미기',
                 ),
                 TextButton.icon(
                   onPressed: () async {
@@ -256,6 +311,7 @@ class _HomePageState extends State<HomePage> {
                         builder: (_) => ChildCardPage(
                           card: _recommendation!,
                           initialLevel: null,
+                          profileId: _activeProfile.id,
                           onOpenParentMode: () =>
                               Navigator.of(context).pushReplacement(
                                 MaterialPageRoute(
@@ -266,9 +322,8 @@ class _HomePageState extends State<HomePage> {
                                   ),
                                 ),
                               ),
-                          onLevelSelected: (level) {
-                            _saveRecommendationLevel(_recommendation!, level);
-                          },
+                          onLevelSelected: (level) =>
+                              _saveRecommendationLevel(_recommendation!, level),
                         ),
                       ),
                     ),
@@ -472,6 +527,7 @@ class GrowthRecordPage extends StatefulWidget {
 
 class _GrowthRecordPageState extends State<GrowthRecordPage> {
   List<Map<String, dynamic>> _records = [];
+  List<GrowthEvent> _growthEvents = [];
   Map<String, ActionCard> _cardsById = {};
   String? _categoryFilter;
   String? _levelFilter;
@@ -526,10 +582,14 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
               .toList()
               .reversed
               .toList();
+    final growthEvents = await GrowthRewardRepository().loadEvents(
+      widget.profileId,
+    );
     if (mounted) {
       setState(() {
         _cardsById = cardById;
         _records = records;
+        _growthEvents = growthEvents;
       });
     }
   }
@@ -731,7 +791,7 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
         ),
       ),
     ),
-    body: _records.isEmpty
+    body: _records.isEmpty && _growthEvents.isEmpty
         ? const Center(
             child: Text(
               '아직 기록이 없어요.\n오늘 해본 행동부터 골라볼까요?',
@@ -740,10 +800,26 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
           )
         : ListView.separated(
             padding: const EdgeInsets.all(20),
-            itemCount: _filteredRecords.length,
+            itemCount: _growthEvents.length + _filteredRecords.length,
             separatorBuilder: (_, _) => const Divider(),
             itemBuilder: (context, index) {
-              final record = _filteredRecords[index];
+              if (index < _growthEvents.length) {
+                final event = _growthEvents[index];
+                final item = GrowthRewardRepository().itemForCard(event.cardId);
+                return ListTile(
+                  leading: Text(
+                    item?.icon ?? '✨',
+                    style: const TextStyle(fontSize: 28),
+                  ),
+                  title: const Text('성장 이벤트: 처음 혼자 해냈어요!'),
+                  subtitle: Text('${item?.name ?? '새 아이템'} 잠금 해제'),
+                  trailing: const Icon(
+                    Icons.auto_awesome,
+                    color: Color(0xfff2b333),
+                  ),
+                );
+              }
+              final record = _filteredRecords[index - _growthEvents.length];
               final date = DateTime.tryParse(
                 record['observedAt'] as String,
               )?.toLocal();
@@ -980,7 +1056,11 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     }
   }
 
-  Future<void> _saveLevel(ActionCard card, IndependenceLevel level) async {
+  Future<GrowthUnlockResult?> _saveLevel(
+    ActionCard card,
+    IndependenceLevel level,
+  ) async {
+    final previous = _levels[card.id];
     setState(() => _levels[card.id] = level);
     final preferences = await SharedPreferences.getInstance();
     final encoded = _levels.map((id, value) => MapEntry(id, value.name));
@@ -1000,6 +1080,14 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     });
     if (history.length > 100) history.removeRange(0, history.length - 100);
     await preferences.setString(_observationStorageKey, jsonEncode(history));
+    if (level == IndependenceLevel.independent &&
+        previous != IndependenceLevel.independent) {
+      return GrowthRewardRepository().unlockFirstIndependent(
+        profileId: widget.profileId,
+        cardId: card.id,
+      );
+    }
+    return null;
   }
 
   Future<void> _selectLevel(
@@ -1011,6 +1099,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
         builder: (_) => ChildCardPage(
           card: card,
           initialLevel: _levels[card.id],
+          profileId: widget.profileId,
           onOpenParentMode: () => Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => ParentCardPage(
@@ -1316,14 +1405,17 @@ class ChildCardPage extends StatefulWidget {
     super.key,
     required this.card,
     required this.initialLevel,
+    this.profileId = ProfileRepository.defaultProfileId,
     this.onOpenParentMode,
     this.onLevelSelected,
   });
 
   final ActionCard card;
   final IndependenceLevel? initialLevel;
+  final String profileId;
   final VoidCallback? onOpenParentMode;
-  final ValueChanged<IndependenceLevel>? onLevelSelected;
+  final Future<GrowthUnlockResult?> Function(IndependenceLevel)?
+  onLevelSelected;
 
   @override
   State<ChildCardPage> createState() => _ChildCardPageState();
@@ -1333,10 +1425,17 @@ class _ChildCardPageState extends State<ChildCardPage> {
   late IndependenceLevel? _selected = widget.initialLevel;
   double _horizontalDragDistance = 0;
 
-  void _select(IndependenceLevel level) {
+  Future<void> _select(IndependenceLevel level) async {
     setState(() => _selected = level);
     if (widget.onLevelSelected != null) {
-      widget.onLevelSelected!(level);
+      final result = await widget.onLevelSelected!(level);
+      if (mounted && result != null) {
+        await showGrowthCelebration(
+          context,
+          result: result,
+          profileId: widget.profileId,
+        );
+      }
     } else {
       Navigator.pop(context, level);
     }
@@ -1471,6 +1570,8 @@ class ParentCardPage extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            _GrowthUnlockStatus(cardId: card.id, profileId: profileId),
             const Divider(height: 36),
             Text('성공 기준', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
@@ -1535,6 +1636,35 @@ class ParentCardPage extends StatelessWidget {
       ),
     );
   }
+}
+
+class _GrowthUnlockStatus extends StatelessWidget {
+  const _GrowthUnlockStatus({required this.cardId, required this.profileId});
+  final String cardId;
+  final String profileId;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<GrowthEvent>>(
+    future: GrowthRewardRepository().loadEvents(profileId),
+    builder: (context, snapshot) {
+      final matching =
+          snapshot.data?.where((item) => item.cardId == cardId).toList() ??
+          const <GrowthEvent>[];
+      final event = matching.isEmpty ? null : matching.first;
+      if (event == null) return const SizedBox.shrink();
+      final item = GrowthRewardRepository().itemForCard(cardId);
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xfffff3cc),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          '${item?.icon ?? '✨'} 성장 이벤트 · ${item?.name ?? '새 아이템'} 잠금 해제',
+        ),
+      );
+    },
+  );
 }
 
 class _DetailRow extends StatelessWidget {

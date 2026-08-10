@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:growup/card_detail_content.dart';
+import 'package:growup/growth_reward_repository.dart';
 import 'package:growup/main.dart';
 import 'package:growup/profile_repository.dart';
 
@@ -37,6 +38,28 @@ void main() {
       final cardId = card['cardId'] as String;
       expect(cardDetailContentById[cardId], isNotNull, reason: cardId);
     }
+  });
+
+  test('unlocks a reward only once for a first independent action', () async {
+    SharedPreferences.setMockInitialValues({});
+    final repository = GrowthRewardRepository();
+
+    final first = await repository.unlockFirstIndependent(
+      profileId: 'child-a',
+      cardId: 'H-01',
+    );
+    final second = await repository.unlockFirstIndependent(
+      profileId: 'child-a',
+      cardId: 'H-01',
+    );
+
+    expect(first?.item.id, 'bathroom_soap_01');
+    expect(second, isNull);
+    expect((await repository.loadEvents('child-a')), hasLength(1));
+    expect(
+      (await repository.unlockedItems('child-a')).single.id,
+      'bathroom_soap_01',
+    );
   });
 
   testWidgets('renders the home screen', (WidgetTester tester) async {

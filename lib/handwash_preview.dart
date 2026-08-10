@@ -52,7 +52,10 @@ class _HandwashPreviewLoaderState extends State<_HandwashPreviewLoader> {
       return ChildCardPage(
         card: handwash,
         initialLevel: _level,
-        onLevelSelected: (level) => setState(() => _level = level),
+        onLevelSelected: (level) async {
+          setState(() => _level = level);
+          return null;
+        },
         onOpenParentMode: () => Navigator.of(context).push<void>(
           MaterialPageRoute(
             builder: (_) => ParentCardPage(card: handwash, cardById: cardById),
