@@ -16,6 +16,8 @@ class GrowUpApp extends StatelessWidget {
     return MaterialApp(
       title: 'GrowUp',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) =>
+          AppViewport(child: child ?? const SizedBox()),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xff3b7d6a),
@@ -27,6 +29,34 @@ class GrowUpApp extends StatelessWidget {
       home: const ActionLibraryPage(),
     );
   }
+}
+
+/// 실제 휴대폰에서는 전체 폭을 쓰고, 브라우저/태블릿에서는 420px 폭의
+/// 휴대폰 화면처럼 가운데에 표시한다.
+class AppViewport extends StatelessWidget {
+  const AppViewport({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (constraints.maxWidth <= 520) return child;
+      return ColoredBox(
+        color: const Color(0xffeef8e9),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Material(
+              elevation: 12,
+              borderRadius: BorderRadius.circular(32),
+              clipBehavior: Clip.antiAlias,
+              child: child,
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 enum IndependenceLevel { independent, withSupport, notYet }
@@ -74,6 +104,7 @@ class ActionLibraryPage extends StatefulWidget {
 
 class _ActionLibraryPageState extends State<ActionLibraryPage> {
   static const _storageKey = 'action_card_levels_v1';
+  static const _observationStorageKey = 'action_observations_v1';
   static const categoryLabels = <String, String>{
     'hygiene': '개인 위생',
     'dressing': '옷 입기',
@@ -128,6 +159,17 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     final preferences = await SharedPreferences.getInstance();
     final encoded = _levels.map((id, value) => MapEntry(id, value.name));
     await preferences.setString(_storageKey, jsonEncode(encoded));
+    final saved = preferences.getString(_observationStorageKey);
+    final history = saved == null
+        ? <dynamic>[]
+        : List<dynamic>.from(jsonDecode(saved) as List<dynamic>);
+    history.add({
+      'cardId': card.id,
+      'level': level.name,
+      'observedAt': DateTime.now().toIso8601String(),
+    });
+    if (history.length > 100) history.removeRange(0, history.length - 100);
+    await preferences.setString(_observationStorageKey, jsonEncode(history));
   }
 
   Future<void> _selectLevel(ActionCard card) async {
@@ -308,15 +350,35 @@ class _RelatedActions extends StatelessWidget {
   }
 }
 
-class ChildCardPage extends StatelessWidget {
+class ChildCardPage extends StatefulWidget {
   const ChildCardPage({
     super.key,
     required this.card,
     required this.initialLevel,
+    this.onOpenParentMode,
+    this.onLevelSelected,
   });
 
   final ActionCard card;
   final IndependenceLevel? initialLevel;
+  final VoidCallback? onOpenParentMode;
+  final ValueChanged<IndependenceLevel>? onLevelSelected;
+
+  @override
+  State<ChildCardPage> createState() => _ChildCardPageState();
+}
+
+class _ChildCardPageState extends State<ChildCardPage> {
+  late IndependenceLevel? _selected = widget.initialLevel;
+
+  void _select(IndependenceLevel level) {
+    setState(() => _selected = level);
+    if (widget.onLevelSelected != null) {
+      widget.onLevelSelected!(level);
+    } else {
+      Navigator.pop(context, level);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -333,13 +395,20 @@ class ChildCardPage extends StatelessWidget {
                     icon: const Icon(Icons.arrow_back),
                   ),
                   const Expanded(child: _ProgressDots()),
+                  if (widget.onOpenParentMode != null)
+                    TextButton(
+                      onPressed: widget.onOpenParentMode,
+                      child: const Text('부모 모드'),
+                    ),
                   const Icon(Icons.star_rounded, color: Color(0xffffc943)),
                 ],
               ),
               const SizedBox(height: 16),
-              Expanded(child: ActionIllustration(card: card, large: true)),
+              Expanded(
+                child: ActionIllustration(card: widget.card, large: true),
+              ),
               Text(
-                card.childTitle,
+                widget.card.childTitle,
                 style: Theme.of(context).textTheme.displaySmall,
               ),
               const SizedBox(height: 28),
@@ -347,21 +416,18 @@ class ChildCardPage extends StatelessWidget {
                 children: [
                   _ChildStatusButton(
                     level: IndependenceLevel.independent,
-                    selected: initialLevel,
-                    onTap: () =>
-                        Navigator.pop(context, IndependenceLevel.independent),
+                    selected: _selected,
+                    onTap: () => _select(IndependenceLevel.independent),
                   ),
                   _ChildStatusButton(
                     level: IndependenceLevel.withSupport,
-                    selected: initialLevel,
-                    onTap: () =>
-                        Navigator.pop(context, IndependenceLevel.withSupport),
+                    selected: _selected,
+                    onTap: () => _select(IndependenceLevel.withSupport),
                   ),
                   _ChildStatusButton(
                     level: IndependenceLevel.notYet,
-                    selected: initialLevel,
-                    onTap: () =>
-                        Navigator.pop(context, IndependenceLevel.notYet),
+                    selected: _selected,
+                    onTap: () => _select(IndependenceLevel.notYet),
                   ),
                 ],
               ),
@@ -481,6 +547,14 @@ class ParentCardPage extends StatelessWidget {
                 '처음부터 완벽하게 해내는 것이 목표는 아니에요. 아이가 스스로 시도할 시간을 충분히 기다려 주세요.',
               ),
             ),
+            const Divider(height: 28),
+            const _DetailRow(label: '준비물', value: '비누, 수건'),
+            const Divider(height: 28),
+            const _DetailRow(label: '안전 주의', value: '바닥이 미끄러울 수 있으니 주의해 주세요.'),
+            const Divider(height: 28),
+            _ObservationHistory(cardId: card.id),
+            const Divider(height: 28),
+            _MemoEditor(cardId: card.id),
           ],
         ),
       ),
@@ -488,22 +562,181 @@ class ParentCardPage extends StatelessWidget {
   }
 }
 
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 92,
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xff28753c),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      Expanded(child: Text(value)),
+    ],
+  );
+}
+
+class _MemoEditor extends StatefulWidget {
+  const _MemoEditor({required this.cardId});
+  final String cardId;
+
+  @override
+  State<_MemoEditor> createState() => _MemoEditorState();
+}
+
+class _ObservationHistory extends StatefulWidget {
+  const _ObservationHistory({required this.cardId});
+  final String cardId;
+
+  @override
+  State<_ObservationHistory> createState() => _ObservationHistoryState();
+}
+
+class _ObservationHistoryState extends State<_ObservationHistory> {
+  List<Map<String, dynamic>> _records = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    final raw = preferences.getString('action_observations_v1');
+    final records = raw == null
+        ? <Map<String, dynamic>>[]
+        : (jsonDecode(raw) as List<dynamic>)
+              .cast<Map<String, dynamic>>()
+              .where((record) => record['cardId'] == widget.cardId)
+              .toList()
+              .reversed
+              .take(3)
+              .toList();
+    if (mounted) setState(() => _records = records);
+  }
+
+  String _label(String value) => switch (value) {
+    'independent' => '🟢 혼자',
+    'withSupport' => '🟡 같이',
+    _ => '⚪ 안 해봤어요',
+  };
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        '최근 기록',
+        style: TextStyle(color: Color(0xff28753c), fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 8),
+      if (_records.isEmpty)
+        const Text('아직 기록이 없어요.')
+      else
+        for (final record in _records)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '${_label(record['level'] as String)} · ${_formatDate(record['observedAt'] as String)}',
+            ),
+          ),
+    ],
+  );
+
+  String _formatDate(String value) {
+    final date = DateTime.tryParse(value)?.toLocal();
+    if (date == null) return '';
+    return '${date.month}월 ${date.day}일 ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _MemoEditorState extends State<_MemoEditor> {
+  late final TextEditingController _controller = TextEditingController();
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    _controller.text =
+        preferences.getString('parent_note_${widget.cardId}') ?? '';
+    if (mounted) setState(() => _loaded = true);
+  }
+
+  Future<void> _save(String value) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString('parent_note_${widget.cardId}', value);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        '메모',
+        style: TextStyle(color: Color(0xff28753c), fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 8),
+      TextField(
+        controller: _controller,
+        enabled: _loaded,
+        minLines: 2,
+        maxLines: 4,
+        onChanged: _save,
+        decoration: const InputDecoration(
+          hintText: '필요한 내용을 메모해 보세요.',
+          border: OutlineInputBorder(),
+        ),
+      ),
+    ],
+  );
+}
+
 class ActionIllustration extends StatelessWidget {
   const ActionIllustration({super.key, required this.card, this.large = false});
   final ActionCard card;
   final bool large;
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(28),
+    child: ColoredBox(
       color: const Color(0xfff4f0e8),
-      borderRadius: BorderRadius.circular(28),
+      child: card.id == 'H-01'
+          ? Image.asset(
+              'assets/illustrations/h-01-wash-hands.png',
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => _fallback(),
+            )
+          : _fallback(),
     ),
-    child: Center(
-      child: Icon(
-        _iconFor(card.category),
-        size: large ? 150 : 72,
-        color: const Color(0xff478bc2),
-      ),
+  );
+
+  Widget _fallback() => Center(
+    child: Icon(
+      _iconFor(card.category),
+      size: large ? 150 : 72,
+      color: const Color(0xff478bc2),
     ),
   );
   IconData _iconFor(String category) => switch (category) {
