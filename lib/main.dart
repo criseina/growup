@@ -1007,6 +1007,7 @@ class ActionIllustration extends StatelessWidget {
 
   String? get _assetPath => switch (card.id) {
     'H-01' => 'assets/illustrations/h-01-wash-hands.png',
+    'H-02' => 'assets/illustrations/h-02-brush-teeth.png',
     'H-03' => 'assets/illustrations/h-03-wash-face.png',
     _ => null,
   };
