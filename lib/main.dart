@@ -283,7 +283,10 @@ class _AppBottomNavigation extends StatelessWidget {
 
   void _goHome(BuildContext context) {
     if (current != _AppDestination.home) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomePage()),
+        (route) => false,
+      );
     }
   }
 
@@ -296,9 +299,10 @@ class _AppBottomNavigation extends StatelessWidget {
     final page = destination == _AppDestination.actions
         ? ActionLibraryPage(profileId: profileId)
         : GrowthRecordPage(profileId: profileId);
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => page));
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => page),
+      (route) => false,
+    );
   }
 
   @override
@@ -315,7 +319,7 @@ class _AppBottomNavigation extends StatelessWidget {
         children: [
           _HomeNavItem(
             icon: Icons.auto_awesome_outlined,
-            label: '오늘 해볼 행동',
+            label: '행동 고르기',
             selected: current == _AppDestination.actions,
             onTap: () => _goTo(context, _AppDestination.actions),
           ),
@@ -1014,7 +1018,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_parentMode ? 'GrowUp 부모 모드' : 'GrowUp'),
+        title: Text(_parentMode ? 'GrowUp 부모 모드' : '행동 고르기'),
         centerTitle: false,
         actions: [
           TextButton.icon(
@@ -1040,13 +1044,14 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
               : cards
                     .where((card) => card.category == _selectedCategory)
                     .toList();
+          final orderedCards = _orderCards(visibleCards);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
                 child: Text(
-                  _parentMode ? '행동을 관찰하고 다음을 살펴보세요.' : '오늘 어떤 행동을 해볼까요?',
+                  _parentMode ? '행동을 관찰하고 다음을 살펴보세요.' : '어떤 행동을 골라볼까요?',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
               ),
@@ -1077,17 +1082,22 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
                     label: Text(categoryLabels[_selectedCategory]!),
                   ),
                 ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  child: Text('시작 행동부터 순서대로 살펴볼 수 있어요.'),
+                ),
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                    itemCount: visibleCards.length,
+                    itemCount: orderedCards.length,
                     itemBuilder: (context, index) {
-                      final card = visibleCards[index];
+                      final card = orderedCards[index];
                       return _TreeCard(
                         card: card,
+                        cardById: cardById,
                         level: _levels[card.id],
                         parentMode: _parentMode,
-                        isLast: index == visibleCards.length - 1,
+                        isLast: index == orderedCards.length - 1,
                         onTap: () => _parentMode
                             ? _showParentGuide(card, cardById)
                             : _selectLevel(card, cardById),
@@ -1116,6 +1126,25 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     'safety_help' => Icons.health_and_safety_outlined,
     _ => Icons.star_outline,
   };
+
+  List<ActionCard> _orderCards(List<ActionCard> cards) {
+    final remaining = List<ActionCard>.from(cards);
+    final ordered = <ActionCard>[];
+    final idsInCategory = cards.map((card) => card.id).toSet();
+    while (remaining.isNotEmpty) {
+      final nextIndex = remaining.indexWhere(
+        (card) => card.prerequisiteCardIds
+            .where(idsInCategory.contains)
+            .every((id) => ordered.any((item) => item.id == id)),
+      );
+      if (nextIndex == -1) {
+        ordered.addAll(remaining);
+        break;
+      }
+      ordered.add(remaining.removeAt(nextIndex));
+    }
+    return ordered;
+  }
 }
 
 class _RelatedActions extends StatelessWidget {
@@ -1184,12 +1213,14 @@ class _CategoryTile extends StatelessWidget {
 class _TreeCard extends StatelessWidget {
   const _TreeCard({
     required this.card,
+    required this.cardById,
     required this.level,
     required this.parentMode,
     required this.isLast,
     required this.onTap,
   });
   final ActionCard card;
+  final Map<String, ActionCard> cardById;
   final IndependenceLevel? level;
   final bool parentMode;
   final bool isLast;
@@ -1234,7 +1265,24 @@ class _TreeCard extends StatelessWidget {
                 parentMode ? card.title : card.childTitle,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              subtitle: Text(_status),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_status),
+                  const SizedBox(height: 4),
+                  Text(
+                    card.prerequisiteCardIds.isEmpty
+                        ? '● 시작 행동'
+                        : '↳ 먼저: ${card.prerequisiteCardIds.map((id) => cardById[id]?.title ?? id).join(', ')}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xff28753c),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
               trailing: const Icon(Icons.chevron_right),
               onTap: onTap,
             ),
