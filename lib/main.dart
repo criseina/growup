@@ -1009,6 +1009,7 @@ class ActionIllustration extends StatelessWidget {
     'H-01' => 'assets/illustrations/h-01-wash-hands.png',
     'H-02' => 'assets/illustrations/h-02-brush-teeth.png',
     'H-03' => 'assets/illustrations/h-03-wash-face.png',
+    'H-04' => 'assets/illustrations/h-04-wash-body.png',
     _ => null,
   };
   IconData _iconFor(String category) => switch (category) {

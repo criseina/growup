@@ -63,6 +63,7 @@ flutter:
     - assets/illustrations/h-01-wash-hands.png
     - assets/illustrations/h-02-brush-teeth.png
     - assets/illustrations/h-03-wash-face.png
+    - assets/illustrations/h-04-wash-body.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
