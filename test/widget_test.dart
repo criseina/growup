@@ -6,8 +6,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:growup/card_detail_content.dart';
 import 'package:growup/main.dart';
+import 'package:growup/profile_repository.dart';
 
 void main() {
+  test('creates a default child profile', () async {
+    SharedPreferences.setMockInitialValues({});
+    final profiles = await ProfileRepository().loadProfiles();
+
+    expect(profiles, hasLength(1));
+    expect(profiles.single.id, ProfileRepository.defaultProfileId);
+  });
+
   test('all action cards have parent detail content', () async {
     final raw = await rootBundle.loadString('data/action_cards_v1.json');
     final cards =

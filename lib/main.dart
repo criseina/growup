@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'card_detail_content.dart';
+import 'profile_page.dart';
+import 'profile_repository.dart';
 
 void main() {
   runApp(const GrowUpApp());
@@ -61,8 +63,27 @@ class AppViewport extends StatelessWidget {
   );
 }
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final _profiles = ProfileRepository();
+  ChildProfile _activeProfile = ProfileRepository.defaultProfile;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final profile = await _profiles.loadActiveProfile();
+    if (mounted) setState(() => _activeProfile = profile);
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -73,7 +94,25 @@ class HomePage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 18),
-            Text('GrowUp', style: Theme.of(context).textTheme.titleLarge),
+            Row(
+              children: [
+                Text('GrowUp', style: Theme.of(context).textTheme.titleLarge),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ProfilePage(activeProfile: _activeProfile),
+                      ),
+                    );
+                    await _loadProfile();
+                  },
+                  icon: const Icon(Icons.face_outlined),
+                  label: Text(_activeProfile.name),
+                ),
+              ],
+            ),
             const SizedBox(height: 34),
             Text(
               '오늘 어떤 걸\n해볼까?',
@@ -88,7 +127,10 @@ class HomePage extends StatelessWidget {
               subtitle: '카드를 보고 상태를 골라요',
               color: const Color(0xffe5f5dc),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ActionLibraryPage()),
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ActionLibraryPage(profileId: _activeProfile.id),
+                ),
               ),
             ),
             const SizedBox(height: 14),
@@ -98,7 +140,10 @@ class HomePage extends StatelessWidget {
               subtitle: '내가 해본 행동을 살펴봐요',
               color: const Color(0xfffff1c9),
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const GrowthRecordPage()),
+                MaterialPageRoute(
+                  builder: (_) =>
+                      GrowthRecordPage(profileId: _activeProfile.id),
+                ),
               ),
             ),
             const Spacer(),
@@ -106,7 +151,10 @@ class HomePage extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => const ActionLibraryPage(parentMode: true),
+                    builder: (_) => ActionLibraryPage(
+                      parentMode: true,
+                      profileId: _activeProfile.id,
+                    ),
                   ),
                 ),
                 icon: const Icon(Icons.family_restroom_outlined),
@@ -168,7 +216,11 @@ class _HomeAction extends StatelessWidget {
 }
 
 class GrowthRecordPage extends StatefulWidget {
-  const GrowthRecordPage({super.key});
+  const GrowthRecordPage({
+    super.key,
+    this.profileId = ProfileRepository.defaultProfileId,
+  });
+  final String profileId;
 
   @override
   State<GrowthRecordPage> createState() => _GrowthRecordPageState();
@@ -177,6 +229,20 @@ class GrowthRecordPage extends StatefulWidget {
 class _GrowthRecordPageState extends State<GrowthRecordPage> {
   List<Map<String, dynamic>> _records = [];
   Map<String, ActionCard> _cardsById = {};
+  String? _categoryFilter;
+  String? _levelFilter;
+
+  List<Map<String, dynamic>> get _filteredRecords => _records.where((record) {
+    final card = _cardsById[record['cardId']];
+    final categoryMatches =
+        _categoryFilter == null || card?.category == _categoryFilter;
+    final levelMatches =
+        _levelFilter == null || record['level'] == _levelFilter;
+    return categoryMatches && levelMatches;
+  }).toList();
+
+  int _countFor(String level) =>
+      _records.where((record) => record['level'] == level).length;
 
   @override
   void initState() {
@@ -199,6 +265,13 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
         ? <Map<String, dynamic>>[]
         : (jsonDecode(raw) as List<dynamic>)
               .cast<Map<String, dynamic>>()
+              .where(
+                (record) =>
+                    (record['profileId'] ??
+                        ProfileRepository.defaultProfileId) ==
+                    widget.profileId,
+              )
+              .toList()
               .reversed
               .toList();
     if (mounted) {
@@ -217,7 +290,74 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('내 성장 기록')),
+    appBar: AppBar(
+      title: const Text('내 성장 기록'),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(122),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _RecordSummary(
+                total: _records.length,
+                independent: _countFor('independent'),
+                withSupport: _countFor('withSupport'),
+                notYet: _countFor('notYet'),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('전체'),
+                      selected: _categoryFilter == null,
+                      onSelected: (_) => setState(() => _categoryFilter = null),
+                    ),
+                    const SizedBox(width: 6),
+                    for (final category
+                        in _cardsById.values
+                            .map((card) => card.category)
+                            .toSet()) ...[
+                      ChoiceChip(
+                        label: Text(
+                          _ActionLibraryPageState.categoryLabels[category] ??
+                              category,
+                        ),
+                        selected: _categoryFilter == category,
+                        onSelected: (_) => setState(
+                          () => _categoryFilter = _categoryFilter == category
+                              ? null
+                              : category,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    for (final level in const [
+                      'independent',
+                      'withSupport',
+                      'notYet',
+                    ]) ...[
+                      FilterChip(
+                        label: Text(_level(level)),
+                        selected: _levelFilter == level,
+                        onSelected: (_) => setState(
+                          () => _levelFilter = _levelFilter == level
+                              ? null
+                              : level,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
     body: _records.isEmpty
         ? const Center(
             child: Text(
@@ -227,10 +367,10 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
           )
         : ListView.separated(
             padding: const EdgeInsets.all(20),
-            itemCount: _records.length,
+            itemCount: _filteredRecords.length,
             separatorBuilder: (_, _) => const Divider(),
             itemBuilder: (context, index) {
-              final record = _records[index];
+              final record = _filteredRecords[index];
               final date = DateTime.tryParse(
                 record['observedAt'] as String,
               )?.toLocal();
@@ -244,8 +384,11 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) =>
-                          ParentCardPage(card: card, cardById: _cardsById),
+                      builder: (_) => ParentCardPage(
+                        card: card,
+                        cardById: _cardsById,
+                        profileId: widget.profileId,
+                      ),
                     ),
                   );
                 },
@@ -262,6 +405,68 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
               );
             },
           ),
+  );
+}
+
+class _RecordSummary extends StatelessWidget {
+  const _RecordSummary({
+    required this.total,
+    required this.independent,
+    required this.withSupport,
+    required this.notYet,
+  });
+
+  final int total;
+  final int independent;
+  final int withSupport;
+  final int notYet;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      _SummaryCount(label: '전체', count: total, color: const Color(0xff3b7d6a)),
+      _SummaryCount(
+        label: '혼자',
+        count: independent,
+        color: const Color(0xff55ae52),
+      ),
+      _SummaryCount(
+        label: '같이',
+        count: withSupport,
+        color: const Color(0xffffc63d),
+      ),
+      _SummaryCount(label: '아직', count: notYet, color: const Color(0xff999999)),
+    ],
+  );
+}
+
+class _SummaryCount extends StatelessWidget {
+  const _SummaryCount({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Text('$count', style: Theme.of(context).textTheme.titleMedium),
+          Text(label, style: TextStyle(color: color, fontSize: 12)),
+        ],
+      ),
+    ),
   );
 }
 
@@ -302,8 +507,13 @@ class ActionCard {
 }
 
 class ActionLibraryPage extends StatefulWidget {
-  const ActionLibraryPage({super.key, this.parentMode = false});
+  const ActionLibraryPage({
+    super.key,
+    this.parentMode = false,
+    this.profileId = ProfileRepository.defaultProfileId,
+  });
   final bool parentMode;
+  final String profileId;
 
   @override
   State<ActionLibraryPage> createState() => _ActionLibraryPageState();
@@ -344,7 +554,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
 
   Future<void> _loadProgress() async {
     final preferences = await SharedPreferences.getInstance();
-    final saved = preferences.getString(_storageKey);
+    final saved = preferences.getString('${_storageKey}_${widget.profileId}');
     if (saved != null) {
       final values = jsonDecode(saved) as Map<String, dynamic>;
       for (final entry in values.entries) {
@@ -365,13 +575,17 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     setState(() => _levels[card.id] = level);
     final preferences = await SharedPreferences.getInstance();
     final encoded = _levels.map((id, value) => MapEntry(id, value.name));
-    await preferences.setString(_storageKey, jsonEncode(encoded));
+    await preferences.setString(
+      '${_storageKey}_${widget.profileId}',
+      jsonEncode(encoded),
+    );
     final saved = preferences.getString(_observationStorageKey);
     final history = saved == null
         ? <dynamic>[]
         : List<dynamic>.from(jsonDecode(saved) as List<dynamic>);
     history.add({
       'cardId': card.id,
+      'profileId': widget.profileId,
       'level': level.name,
       'observedAt': DateTime.now().toIso8601String(),
     });
@@ -394,7 +608,11 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
   void _showParentGuide(ActionCard card, Map<String, ActionCard> cardById) {
     Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => ParentCardPage(card: card, cardById: cardById),
+        builder: (_) => ParentCardPage(
+          card: card,
+          cardById: cardById,
+          profileId: widget.profileId,
+        ),
       ),
     );
   }
@@ -720,10 +938,16 @@ class _ChildCardPageState extends State<ChildCardPage> {
 }
 
 class ParentCardPage extends StatelessWidget {
-  const ParentCardPage({super.key, required this.card, required this.cardById});
+  const ParentCardPage({
+    super.key,
+    required this.card,
+    required this.cardById,
+    this.profileId = ProfileRepository.defaultProfileId,
+  });
 
   final ActionCard card;
   final Map<String, ActionCard> cardById;
+  final String profileId;
 
   @override
   Widget build(BuildContext context) {
@@ -832,9 +1056,9 @@ class ParentCardPage extends StatelessWidget {
             const Divider(height: 28),
             _DetailRow(label: '안전 주의', value: detailContent.safetyNote),
             const Divider(height: 28),
-            _ObservationHistory(cardId: card.id),
+            _ObservationHistory(cardId: card.id, profileId: profileId),
             const Divider(height: 28),
-            _MemoEditor(cardId: card.id),
+            _MemoEditor(cardId: card.id, profileId: profileId),
           ],
         ),
       ),
@@ -867,16 +1091,24 @@ class _DetailRow extends StatelessWidget {
 }
 
 class _MemoEditor extends StatefulWidget {
-  const _MemoEditor({required this.cardId});
+  const _MemoEditor({
+    required this.cardId,
+    this.profileId = ProfileRepository.defaultProfileId,
+  });
   final String cardId;
+  final String profileId;
 
   @override
   State<_MemoEditor> createState() => _MemoEditorState();
 }
 
 class _ObservationHistory extends StatefulWidget {
-  const _ObservationHistory({required this.cardId});
+  const _ObservationHistory({
+    required this.cardId,
+    this.profileId = ProfileRepository.defaultProfileId,
+  });
   final String cardId;
+  final String profileId;
 
   @override
   State<_ObservationHistory> createState() => _ObservationHistoryState();
@@ -899,6 +1131,12 @@ class _ObservationHistoryState extends State<_ObservationHistory> {
         : (jsonDecode(raw) as List<dynamic>)
               .cast<Map<String, dynamic>>()
               .where((record) => record['cardId'] == widget.cardId)
+              .where(
+                (record) =>
+                    (record['profileId'] ??
+                        ProfileRepository.defaultProfileId) ==
+                    widget.profileId,
+              )
               .toList()
               .reversed
               .take(3)
@@ -954,13 +1192,19 @@ class _MemoEditorState extends State<_MemoEditor> {
   Future<void> _load() async {
     final preferences = await SharedPreferences.getInstance();
     _controller.text =
-        preferences.getString('parent_note_${widget.cardId}') ?? '';
+        preferences.getString(
+          'parent_note_${widget.profileId}_${widget.cardId}',
+        ) ??
+        '';
     if (mounted) setState(() => _loaded = true);
   }
 
   Future<void> _save(String value) async {
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setString('parent_note_${widget.cardId}', value);
+    await preferences.setString(
+      'parent_note_${widget.profileId}_${widget.cardId}',
+      value,
+    );
   }
 
   @override
