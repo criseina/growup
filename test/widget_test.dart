@@ -46,6 +46,6 @@ void main() {
 
     expect(find.text('오늘 어떤 걸\n해볼까?'), findsOneWidget);
     expect(find.text('오늘 해볼 행동'), findsOneWidget);
-    expect(find.text('내 성장 기록'), findsOneWidget);
+    expect(find.text('성장 기록'), findsOneWidget);
   });
 }

@@ -115,6 +115,7 @@ class _HomePageState extends State<HomePage> {
   final _profiles = ProfileRepository();
   ChildProfile _activeProfile = ProfileRepository.defaultProfile;
   ActionCard? _recommendation;
+  Map<String, ActionCard> _recommendationCardsById = {};
   String _recommendationReason = '오늘 새로 해볼 행동이에요.';
 
   @override
@@ -152,12 +153,43 @@ class _HomePageState extends State<HomePage> {
     final currentLevel = levels[candidate.id];
     setState(() {
       _recommendation = candidate;
+      _recommendationCardsById = {for (final card in cards) card.id: card};
       _recommendationReason = currentLevel == 'withSupport'
           ? '함께 해본 행동이에요. 오늘은 조금 더 스스로 해볼까요?'
           : currentLevel == 'notYet'
           ? '아직 낯선 행동이에요. 부담 없이 한 단계만 해봐요.'
           : '오늘 처음 해볼 행동이에요.';
     });
+  }
+
+  Future<void> _saveRecommendationLevel(
+    ActionCard card,
+    IndependenceLevel level,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    const levelKey = 'action_card_levels_v1';
+    const historyKey = 'action_observations_v1';
+    final saved = preferences.getString('${levelKey}_${_activeProfile.id}');
+    final levels = saved == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(jsonDecode(saved) as Map<String, dynamic>);
+    levels[card.id] = level.name;
+    await preferences.setString(
+      '${levelKey}_${_activeProfile.id}',
+      jsonEncode(levels),
+    );
+    final rawHistory = preferences.getString(historyKey);
+    final history = rawHistory == null
+        ? <dynamic>[]
+        : List<dynamic>.from(jsonDecode(rawHistory) as List<dynamic>);
+    history.add({
+      'cardId': card.id,
+      'profileId': _activeProfile.id,
+      'level': level.name,
+      'observedAt': DateTime.now().toIso8601String(),
+    });
+    await preferences.setString(historyKey, jsonEncode(history));
+    await _loadRecommendation(_activeProfile);
   }
 
   @override
@@ -209,19 +241,45 @@ class _HomePageState extends State<HomePage> {
                 reason: _recommendationReason,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => ActionLibraryPage(
-                      profileId: _activeProfile.id,
-                      initialCategory: _recommendation!.category,
+                    builder: (_) => ChildCardPage(
+                      card: _recommendation!,
+                      initialLevel: null,
+                      onOpenParentMode: () =>
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (_) => ParentCardPage(
+                                card: _recommendation!,
+                                cardById: _recommendationCardsById,
+                                profileId: _activeProfile.id,
+                              ),
+                            ),
+                          ),
+                      onLevelSelected: (level) {
+                        _saveRecommendationLevel(_recommendation!, level);
+                      },
                     ),
                   ),
                 ),
               ),
             if (_recommendation != null) const SizedBox(height: 14),
-            _HomeAction(
-              icon: Icons.auto_awesome,
-              title: '오늘 해볼 행동',
-              subtitle: '카드를 보고 상태를 골라요',
-              color: const Color(0xffe5f5dc),
+            const Spacer(),
+          ],
+        ),
+      ),
+    ),
+    bottomNavigationBar: SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Color(0xffe8e4dc))),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _HomeNavItem(
+              icon: Icons.auto_awesome_outlined,
+              label: '오늘 해볼 행동',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) =>
@@ -229,12 +287,10 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
-            _HomeAction(
+            const _HomeNavItem(icon: Icons.home_rounded, label: '홈'),
+            _HomeNavItem(
               icon: Icons.menu_book_outlined,
-              title: '내 성장 기록',
-              subtitle: '내가 해본 행동을 살펴봐요',
-              color: const Color(0xfffff1c9),
+              label: '성장 기록',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) =>
@@ -242,23 +298,32 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            const Spacer(),
-            Center(
-              child: TextButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ActionLibraryPage(
-                      parentMode: true,
-                      profileId: _activeProfile.id,
-                    ),
-                  ),
-                ),
-                icon: const Icon(Icons.family_restroom_outlined),
-                label: const Text('부모 모드'),
-              ),
-            ),
           ],
         ),
+      ),
+    ),
+  );
+}
+
+class _HomeNavItem extends StatelessWidget {
+  const _HomeNavItem({required this.icon, required this.label, this.onTap});
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(12),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: const Color(0xff28753c)),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 11)),
+        ],
       ),
     ),
   );
@@ -277,87 +342,51 @@ class _TodayRecommendation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
+    clipBehavior: Clip.antiAlias,
     color: const Color(0xffeff8e9),
     child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const CircleAvatar(
-              backgroundColor: Color(0xff55ae52),
-              foregroundColor: Colors.white,
-              child: Icon(Icons.auto_awesome),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '오늘의 추천 행동',
-                    style: TextStyle(
-                      color: Color(0xff28753c),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    card.childTitle,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  Text(reason),
-                ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '오늘의 추천 행동',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: const Color(0xff28753c),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _HomeAction extends StatelessWidget {
-  const _HomeAction({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Card(
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: color,
-              child: Icon(icon, size: 28),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 4),
-                  Text(subtitle),
-                ],
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 190,
+              width: double.infinity,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: ActionIllustration(card: card, large: true),
               ),
             ),
-            const Icon(Icons.chevron_right),
+            const SizedBox(height: 12),
+            Text(
+              card.childTitle,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 4),
+            Text(reason, textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.touch_app_outlined, size: 18),
+                SizedBox(width: 6),
+                Text('눌러서 아이 모드로 선택하기'),
+              ],
+            ),
           ],
         ),
       ),
@@ -571,7 +600,7 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _RecordSummary(
-                total: _filteredRecords.length,
+                total: _cardsById.length,
                 independent: _countFor('independent'),
                 withSupport: _countFor('withSupport'),
                 notYet: _countFor('notYet'),
@@ -895,11 +924,25 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     await preferences.setString(_observationStorageKey, jsonEncode(history));
   }
 
-  Future<void> _selectLevel(ActionCard card) async {
+  Future<void> _selectLevel(
+    ActionCard card,
+    Map<String, ActionCard> cardById,
+  ) async {
     final selected = await Navigator.of(context).push<IndependenceLevel>(
       MaterialPageRoute(
-        builder: (_) =>
-            ChildCardPage(card: card, initialLevel: _levels[card.id]),
+        builder: (_) => ChildCardPage(
+          card: card,
+          initialLevel: _levels[card.id],
+          onOpenParentMode: () => Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => ParentCardPage(
+                card: card,
+                cardById: cardById,
+                profileId: widget.profileId,
+              ),
+            ),
+          ),
+        ),
       ),
     );
     if (selected != null) {
@@ -999,7 +1042,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
                         isLast: index == visibleCards.length - 1,
                         onTap: () => _parentMode
                             ? _showParentGuide(card, cardById)
-                            : _selectLevel(card),
+                            : _selectLevel(card, cardById),
                       );
                     },
                   ),
@@ -1194,12 +1237,17 @@ class _ChildCardPageState extends State<ChildCardPage> {
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.arrow_back),
                   ),
-                  const Expanded(child: _ProgressDots()),
-                  if (widget.onOpenParentMode != null)
-                    TextButton(
-                      onPressed: widget.onOpenParentMode,
-                      child: const Text('부모 모드'),
+                  Expanded(
+                    child: GestureDetector(
+                      onHorizontalDragEnd: (details) {
+                        if (details.primaryVelocity != null &&
+                            details.primaryVelocity! < -180) {
+                          widget.onOpenParentMode?.call();
+                        }
+                      },
+                      child: const _ProgressDots(),
                     ),
+                  ),
                   const Icon(Icons.star_rounded, color: Color(0xffffc943)),
                 ],
               ),
@@ -1266,8 +1314,6 @@ class ParentCardPage extends StatelessWidget {
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.arrow_back),
                 ),
-                const Spacer(),
-                const Icon(Icons.edit_outlined),
               ],
             ),
             const SizedBox(height: 12),
@@ -1611,27 +1657,52 @@ class _ChildStatusButton extends StatelessWidget {
         '안 해봤어요',
       ),
     };
+    final isSelected = selected == level;
+    final isDimmed = selected != null && !isSelected;
     return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          children: [
-            CircleAvatar(
-              radius: 42,
-              backgroundColor: color,
-              child: Icon(icon, color: Colors.white, size: 42),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: selected == level
-                    ? FontWeight.bold
-                    : FontWeight.normal,
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutBack,
+        scale: isDimmed
+            ? 0.8
+            : isSelected
+            ? 1.1
+            : 1,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(60),
+          child: Column(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: EdgeInsets.all(isSelected ? 6 : 0),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected ? color.withValues(alpha: 0.18) : null,
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.35),
+                            blurRadius: 16,
+                            spreadRadius: 3,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: CircleAvatar(
+                  radius: 42,
+                  backgroundColor: color,
+                  child: Icon(icon, color: Colors.white, size: 42),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.normal),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1676,7 +1747,7 @@ class _ProgressDots extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisAlignment: MainAxisAlignment.center,
     children: List.generate(
-      4,
+      2,
       (index) => Container(
         margin: const EdgeInsets.symmetric(horizontal: 3),
         height: 8,
