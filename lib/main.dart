@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'card_detail_content.dart';
+import 'about_page.dart';
 import 'onboarding_page.dart';
 import 'profile_page.dart';
 import 'profile_repository.dart';
@@ -172,6 +173,13 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Text('GrowUp', style: Theme.of(context).textTheme.titleLarge),
                 const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const AboutPage())),
+                  icon: const Icon(Icons.info_outline),
+                  tooltip: 'GrowUp 안내',
+                ),
                 TextButton.icon(
                   onPressed: () async {
                     await Navigator.of(context).push(
