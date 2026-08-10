@@ -195,8 +195,8 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -262,7 +262,6 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             if (_recommendation != null) const SizedBox(height: 14),
-            const Spacer(),
           ],
         ),
       ),
@@ -272,6 +271,7 @@ class _HomePageState extends State<HomePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: const BoxDecoration(
+          color: Color(0xfffffbf5),
           border: Border(top: BorderSide(color: Color(0xffe8e4dc))),
         ),
         child: Row(
