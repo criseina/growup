@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'card_detail_content.dart';
+
 void main() {
   runApp(const GrowUpApp());
 }
@@ -725,6 +727,8 @@ class ParentCardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final detailContent =
+        cardDetailContentById[card.id] ?? defaultCardDetailContent;
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -821,14 +825,12 @@ class ParentCardPage extends StatelessWidget {
                 color: const Color(0xffeff8e9),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
-                '처음부터 완벽하게 해내는 것이 목표는 아니에요. 아이가 스스로 시도할 시간을 충분히 기다려 주세요.',
-              ),
+              child: Text(detailContent.parentTip),
             ),
             const Divider(height: 28),
-            const _DetailRow(label: '준비물', value: '비누, 수건'),
+            _DetailRow(label: '준비물', value: detailContent.materials),
             const Divider(height: 28),
-            const _DetailRow(label: '안전 주의', value: '바닥이 미끄러울 수 있으니 주의해 주세요.'),
+            _DetailRow(label: '안전 주의', value: detailContent.safetyNote),
             const Divider(height: 28),
             _ObservationHistory(cardId: card.id),
             const Divider(height: 28),
