@@ -26,7 +26,7 @@ class GrowUpApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xfffffbf5),
         useMaterial3: true,
       ),
-      home: const ActionLibraryPage(),
+      home: const HomePage(),
     );
   }
 }
@@ -56,6 +56,197 @@ class AppViewport extends StatelessWidget {
         ),
       );
     },
+  );
+}
+
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 18),
+            Text('GrowUp', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 34),
+            Text(
+              '오늘 어떤 걸\n해볼까?',
+              style: Theme.of(context).textTheme.displaySmall,
+            ),
+            const SizedBox(height: 14),
+            const Text('잘했는지 평가하지 않아요. 오늘 해보고 싶은 행동을 골라요.'),
+            const SizedBox(height: 32),
+            _HomeAction(
+              icon: Icons.auto_awesome,
+              title: '오늘 해볼 행동',
+              subtitle: '카드를 보고 상태를 골라요',
+              color: const Color(0xffe5f5dc),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ActionLibraryPage()),
+              ),
+            ),
+            const SizedBox(height: 14),
+            _HomeAction(
+              icon: Icons.menu_book_outlined,
+              title: '내 성장 기록',
+              subtitle: '내가 해본 행동을 살펴봐요',
+              color: const Color(0xfffff1c9),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const GrowthRecordPage()),
+              ),
+            ),
+            const Spacer(),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ActionLibraryPage(parentMode: true),
+                  ),
+                ),
+                icon: const Icon(Icons.family_restroom_outlined),
+                label: const Text('부모 모드'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _HomeAction extends StatelessWidget {
+  const _HomeAction({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: color,
+              child: Icon(icon, size: 28),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 4),
+                  Text(subtitle),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class GrowthRecordPage extends StatefulWidget {
+  const GrowthRecordPage({super.key});
+
+  @override
+  State<GrowthRecordPage> createState() => _GrowthRecordPageState();
+}
+
+class _GrowthRecordPageState extends State<GrowthRecordPage> {
+  List<Map<String, dynamic>> _records = [];
+  Map<String, String> _titles = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    final raw = preferences.getString('action_observations_v1');
+    final cardsRaw = await rootBundle.loadString('data/action_cards_v1.json');
+    final cards =
+        (jsonDecode(cardsRaw) as Map<String, dynamic>)['cards']
+            as List<dynamic>;
+    final titles = {
+      for (final card in cards.cast<Map<String, dynamic>>())
+        card['cardId'] as String: card['titleKo'] as String,
+    };
+    final records = raw == null
+        ? <Map<String, dynamic>>[]
+        : (jsonDecode(raw) as List<dynamic>)
+              .cast<Map<String, dynamic>>()
+              .reversed
+              .toList();
+    if (mounted) {
+      setState(() {
+        _titles = titles;
+        _records = records;
+      });
+    }
+  }
+
+  String _level(String value) => switch (value) {
+    'independent' => '🟢 혼자 해봤어요',
+    'withSupport' => '🟡 같이 해봤어요',
+    _ => '⚪ 아직 안 해봤어요',
+  };
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('내 성장 기록')),
+    body: _records.isEmpty
+        ? const Center(
+            child: Text(
+              '아직 기록이 없어요.\n오늘 해본 행동부터 골라볼까요?',
+              textAlign: TextAlign.center,
+            ),
+          )
+        : ListView.separated(
+            padding: const EdgeInsets.all(20),
+            itemCount: _records.length,
+            separatorBuilder: (_, _) => const Divider(),
+            itemBuilder: (context, index) {
+              final record = _records[index];
+              final date = DateTime.tryParse(
+                record['observedAt'] as String,
+              )?.toLocal();
+              final time = date == null
+                  ? ''
+                  : '${date.month}월 ${date.day}일 ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+              return ListTile(
+                leading: const Icon(
+                  Icons.favorite_outline,
+                  color: Color(0xff55ae52),
+                ),
+                title: Text(
+                  _titles[record['cardId']] ?? record['cardId'] as String,
+                ),
+                subtitle: Text('${_level(record['level'] as String)}\n$time'),
+              );
+            },
+          ),
   );
 }
 
@@ -96,7 +287,8 @@ class ActionCard {
 }
 
 class ActionLibraryPage extends StatefulWidget {
-  const ActionLibraryPage({super.key});
+  const ActionLibraryPage({super.key, this.parentMode = false});
+  final bool parentMode;
 
   @override
   State<ActionLibraryPage> createState() => _ActionLibraryPageState();
@@ -117,7 +309,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
   late final Future<List<ActionCard>> _cardsFuture = _loadCards();
   final Map<String, IndependenceLevel> _levels = {};
   String? _selectedCategory;
-  bool _parentMode = false;
+  late bool _parentMode = widget.parentMode;
   bool _isLoadingProgress = true;
 
   @override
