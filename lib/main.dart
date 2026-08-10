@@ -235,7 +235,7 @@ class _HomePageState extends State<HomePage> {
                 '오늘 어떤 걸 해볼까?',
                 maxLines: 1,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontSize: 29,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
                   height: 1.1,
                 ),
@@ -425,11 +425,15 @@ class _TodayRecommendation extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             SizedBox(
-              height: 128,
+              height: 144,
               width: double.infinity,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: ActionIllustration(card: card, large: true),
+                child: ActionIllustration(
+                  card: card,
+                  large: true,
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
             const SizedBox(height: 6),
@@ -768,10 +772,19 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
                 title: Text(
                   _cardsById[record['cardId']]?.title ??
                       record['cardId'] as String,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 subtitle: Text(
                   '${_level(record['level'] as String)}\n$time'
                   '${(record['note'] as String? ?? '').isEmpty ? '' : '\n${record['note']}'}',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
                 ),
                 trailing: PopupMenuButton<_RecordMenuAction>(
                   icon: const Icon(Icons.more_vert),
@@ -1205,7 +1218,8 @@ class _CategoryTile extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
+              maxLines: 1,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -1695,9 +1709,15 @@ class _MemoEditorState extends State<_MemoEditor> {
 }
 
 class ActionIllustration extends StatelessWidget {
-  const ActionIllustration({super.key, required this.card, this.large = false});
+  const ActionIllustration({
+    super.key,
+    required this.card,
+    this.large = false,
+    this.fit = BoxFit.cover,
+  });
   final ActionCard card;
   final bool large;
+  final BoxFit fit;
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(28),
@@ -1707,7 +1727,7 @@ class ActionIllustration extends StatelessWidget {
           ? _fallback()
           : Image.asset(
               _assetPath!,
-              fit: BoxFit.cover,
+              fit: fit,
               errorBuilder: (_, _, _) => _fallback(),
             ),
     ),
