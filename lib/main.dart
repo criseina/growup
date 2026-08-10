@@ -266,49 +266,87 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     ),
-    bottomNavigationBar: SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: const BoxDecoration(
-          color: Color(0xfffffbf5),
-          border: Border(top: BorderSide(color: Color(0xffe8e4dc))),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _HomeNavItem(
-              icon: Icons.auto_awesome_outlined,
-              label: '오늘 해볼 행동',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      ActionLibraryPage(profileId: _activeProfile.id),
-                ),
-              ),
-            ),
-            const _HomeNavItem(icon: Icons.home_rounded, label: '홈'),
-            _HomeNavItem(
-              icon: Icons.menu_book_outlined,
-              label: '성장 기록',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      GrowthRecordPage(profileId: _activeProfile.id),
-                ),
-              ),
-            ),
-          ],
-        ),
+    bottomNavigationBar: _AppBottomNavigation(
+      profileId: _activeProfile.id,
+      current: _AppDestination.home,
+    ),
+  );
+}
+
+enum _AppDestination { actions, home, records }
+
+class _AppBottomNavigation extends StatelessWidget {
+  const _AppBottomNavigation({required this.profileId, required this.current});
+
+  final String profileId;
+  final _AppDestination current;
+
+  void _goHome(BuildContext context) {
+    if (current != _AppDestination.home) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+  }
+
+  void _goTo(BuildContext context, _AppDestination destination) {
+    if (destination == current) return;
+    if (destination == _AppDestination.home) {
+      _goHome(context);
+      return;
+    }
+    final page = destination == _AppDestination.actions
+        ? ActionLibraryPage(profileId: profileId)
+        : GrowthRecordPage(profileId: profileId);
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => page));
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: const BoxDecoration(
+        color: Color(0xfffffbf5),
+        border: Border(top: BorderSide(color: Color(0xffe8e4dc))),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _HomeNavItem(
+            icon: Icons.auto_awesome_outlined,
+            label: '오늘 해볼 행동',
+            selected: current == _AppDestination.actions,
+            onTap: () => _goTo(context, _AppDestination.actions),
+          ),
+          _HomeNavItem(
+            icon: Icons.home_rounded,
+            label: '홈',
+            selected: current == _AppDestination.home,
+            onTap: () => _goHome(context),
+          ),
+          _HomeNavItem(
+            icon: Icons.menu_book_outlined,
+            label: '성장 기록',
+            selected: current == _AppDestination.records,
+            onTap: () => _goTo(context, _AppDestination.records),
+          ),
+        ],
       ),
     ),
   );
 }
 
 class _HomeNavItem extends StatelessWidget {
-  const _HomeNavItem({required this.icon, required this.label, this.onTap});
+  const _HomeNavItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
   final IconData icon;
   final String label;
+  final bool selected;
   final VoidCallback? onTap;
 
   @override
@@ -320,9 +358,15 @@ class _HomeNavItem extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: const Color(0xff28753c)),
+          Icon(icon, color: const Color(0xff28753c), size: selected ? 27 : 24),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
         ],
       ),
     ),
@@ -731,6 +775,10 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
               );
             },
           ),
+    bottomNavigationBar: _AppBottomNavigation(
+      profileId: widget.profileId,
+      current: _AppDestination.records,
+    ),
   );
 }
 
@@ -1051,6 +1099,10 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
             ],
           );
         },
+      ),
+      bottomNavigationBar: _AppBottomNavigation(
+        profileId: widget.profileId,
+        current: _AppDestination.actions,
       ),
     );
   }
