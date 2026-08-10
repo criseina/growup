@@ -131,34 +131,10 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
   }
 
   Future<void> _selectLevel(ActionCard card) async {
-    final selected = await showModalBottomSheet<IndependenceLevel>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                card.childTitle,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              const Text('오늘은 어떻게 해봤나요?'),
-              const SizedBox(height: 16),
-              for (final level in IndependenceLevel.values)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: FilledButton.tonal(
-                    onPressed: () => Navigator.pop(context, level),
-                    child: Text(_levelLabel(level)),
-                  ),
-                ),
-            ],
-          ),
-        ),
+    final selected = await Navigator.of(context).push<IndependenceLevel>(
+      MaterialPageRoute(
+        builder: (_) =>
+            ChildCardPage(card: card, initialLevel: _levels[card.id]),
       ),
     );
     if (selected != null) {
@@ -167,41 +143,9 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
   }
 
   void _showParentGuide(ActionCard card, Map<String, ActionCard> cardById) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  card.title,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 20),
-                Text('부모 가이드', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text(card.parentGuide),
-                const SizedBox(height: 20),
-                _RelatedActions(
-                  title: '선행 기술',
-                  ids: card.prerequisiteCardIds,
-                  cardById: cardById,
-                ),
-                const SizedBox(height: 16),
-                _RelatedActions(
-                  title: '권장 다음 행동',
-                  ids: card.nextActionCardIds,
-                  cardById: cardById,
-                ),
-              ],
-            ),
-          ),
-        ),
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ParentCardPage(card: card, cardById: cardById),
       ),
     );
   }
@@ -362,4 +306,319 @@ class _RelatedActions extends StatelessWidget {
       ],
     );
   }
+}
+
+class ChildCardPage extends StatelessWidget {
+  const ChildCardPage({
+    super.key,
+    required this.card,
+    required this.initialLevel,
+  });
+
+  final ActionCard card;
+  final IndependenceLevel? initialLevel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  const Expanded(child: _ProgressDots()),
+                  const Icon(Icons.star_rounded, color: Color(0xffffc943)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(child: ActionIllustration(card: card, large: true)),
+              Text(
+                card.childTitle,
+                style: Theme.of(context).textTheme.displaySmall,
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  _ChildStatusButton(
+                    level: IndependenceLevel.independent,
+                    selected: initialLevel,
+                    onTap: () =>
+                        Navigator.pop(context, IndependenceLevel.independent),
+                  ),
+                  _ChildStatusButton(
+                    level: IndependenceLevel.withSupport,
+                    selected: initialLevel,
+                    onTap: () =>
+                        Navigator.pop(context, IndependenceLevel.withSupport),
+                  ),
+                  _ChildStatusButton(
+                    level: IndependenceLevel.notYet,
+                    selected: initialLevel,
+                    onTap: () =>
+                        Navigator.pop(context, IndependenceLevel.notYet),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ParentCardPage extends StatelessWidget {
+  const ParentCardPage({super.key, required this.card, required this.cardById});
+
+  final ActionCard card;
+  final Map<String, ActionCard> cardById;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back),
+                ),
+                const Spacer(),
+                const Icon(Icons.edit_outlined),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 150,
+                  height: 150,
+                  child: ActionIllustration(card: card),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        card.id,
+                        style: const TextStyle(
+                          color: Color(0xff378b45),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        card.title,
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(card.parentGuide),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 36),
+            Text('성공 기준', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            const Row(
+              children: [
+                Expanded(
+                  child: _Criterion(
+                    color: Color(0xff55ae52),
+                    title: '혼자',
+                    text: '모든 과정을 스스로 해요.',
+                  ),
+                ),
+                Expanded(
+                  child: _Criterion(
+                    color: Color(0xffffc63d),
+                    title: '같이',
+                    text: '안내나 도움과 함께 해요.',
+                  ),
+                ),
+                Expanded(
+                  child: _Criterion(
+                    color: Color(0xffc9c9c4),
+                    title: '안 해봤어요',
+                    text: '아직 시도해 본 적이 없어요.',
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 36),
+            _RelatedActions(
+              title: '선행 행동',
+              ids: card.prerequisiteCardIds,
+              cardById: cardById,
+            ),
+            const Divider(height: 28),
+            _RelatedActions(
+              title: '다음 추천 행동',
+              ids: card.nextActionCardIds,
+              cardById: cardById,
+            ),
+            const Divider(height: 28),
+            Text('부모 팁', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xffeff8e9),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                '처음부터 완벽하게 해내는 것이 목표는 아니에요. 아이가 스스로 시도할 시간을 충분히 기다려 주세요.',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ActionIllustration extends StatelessWidget {
+  const ActionIllustration({super.key, required this.card, this.large = false});
+  final ActionCard card;
+  final bool large;
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: const Color(0xfff4f0e8),
+      borderRadius: BorderRadius.circular(28),
+    ),
+    child: Center(
+      child: Icon(
+        _iconFor(card.category),
+        size: large ? 150 : 72,
+        color: const Color(0xff478bc2),
+      ),
+    ),
+  );
+  IconData _iconFor(String category) => switch (category) {
+    'hygiene' => Icons.soap_outlined,
+    'dressing' => Icons.checkroom_outlined,
+    'meals' => Icons.restaurant_outlined,
+    'belongings_home' => Icons.home_outlined,
+    'outing' => Icons.backpack_outlined,
+    _ => Icons.health_and_safety_outlined,
+  };
+}
+
+class _ChildStatusButton extends StatelessWidget {
+  const _ChildStatusButton({
+    required this.level,
+    required this.selected,
+    required this.onTap,
+  });
+  final IndependenceLevel level;
+  final IndependenceLevel? selected;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    final (color, icon, label) = switch (level) {
+      IndependenceLevel.independent => (
+        const Color(0xff55ae52),
+        Icons.sentiment_satisfied_alt,
+        '혼자\n할 수 있어요',
+      ),
+      IndependenceLevel.withSupport => (
+        const Color(0xffffc63d),
+        Icons.group,
+        '같이\n하면 좋아요',
+      ),
+      IndependenceLevel.notYet => (
+        const Color(0xffc9c9c4),
+        Icons.question_mark,
+        '안 해봤어요',
+      ),
+    };
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 42,
+              backgroundColor: color,
+              child: Icon(icon, color: Colors.white, size: 42),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: selected == level
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Criterion extends StatelessWidget {
+  const _Criterion({
+    required this.color,
+    required this.title,
+    required this.text,
+  });
+  final Color color;
+  final String title;
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 6),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            CircleAvatar(radius: 7, backgroundColor: color),
+            const SizedBox(width: 6),
+            Text(
+              title,
+              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(text),
+      ],
+    ),
+  );
+}
+
+class _ProgressDots extends StatelessWidget {
+  const _ProgressDots();
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: List.generate(
+      4,
+      (index) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        height: 8,
+        width: 52,
+        decoration: BoxDecoration(
+          color: index == 0 ? const Color(0xff55ae52) : const Color(0xffeceae2),
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    ),
+  );
 }
