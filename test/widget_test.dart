@@ -69,8 +69,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('오늘 어떤 걸 해볼까?'), findsOneWidget);
-    expect(find.text('행동 고르기'), findsOneWidget);
-    expect(find.text('성장 기록'), findsOneWidget);
+    expect(find.text('행동'), findsOneWidget);
+    expect(find.text('아바타'), findsOneWidget);
+    expect(find.text('기록'), findsOneWidget);
   });
 
   testWidgets('opens parent mode after a left swipe on a child card', (

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'card_detail_content.dart';
 import 'about_page.dart';
+import 'avatar_world_page.dart';
 import 'growth_reward_pages.dart';
 import 'growth_reward_repository.dart';
 import 'onboarding_page.dart';
@@ -341,7 +342,7 @@ class _HomePageState extends State<HomePage> {
   );
 }
 
-enum _AppDestination { actions, home, records }
+enum _AppDestination { actions, home, avatar, records }
 
 class _AppBottomNavigation extends StatelessWidget {
   const _AppBottomNavigation({required this.profileId, required this.current});
@@ -364,9 +365,12 @@ class _AppBottomNavigation extends StatelessWidget {
       _goHome(context);
       return;
     }
-    final page = destination == _AppDestination.actions
-        ? ActionLibraryPage(profileId: profileId)
-        : GrowthRecordPage(profileId: profileId);
+    final page = switch (destination) {
+      _AppDestination.actions => ActionLibraryPage(profileId: profileId),
+      _AppDestination.avatar => AvatarWorldPage(profileId: profileId),
+      _AppDestination.records => GrowthRecordPage(profileId: profileId),
+      _AppDestination.home => const HomePage(),
+    };
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => page),
       (route) => false,
@@ -387,7 +391,7 @@ class _AppBottomNavigation extends StatelessWidget {
         children: [
           _HomeNavItem(
             icon: Icons.auto_awesome_outlined,
-            label: '행동 고르기',
+            label: '행동',
             selected: current == _AppDestination.actions,
             onTap: () => _goTo(context, _AppDestination.actions),
           ),
@@ -398,8 +402,14 @@ class _AppBottomNavigation extends StatelessWidget {
             onTap: () => _goHome(context),
           ),
           _HomeNavItem(
+            icon: Icons.face_retouching_natural,
+            label: '아바타',
+            selected: current == _AppDestination.avatar,
+            onTap: () => _goTo(context, _AppDestination.avatar),
+          ),
+          _HomeNavItem(
             icon: Icons.menu_book_outlined,
-            label: '성장 기록',
+            label: '기록',
             selected: current == _AppDestination.records,
             onTap: () => _goTo(context, _AppDestination.records),
           ),

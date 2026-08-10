@@ -66,6 +66,7 @@ flutter:
     - assets/illustrations/h-03-wash-face.png
     - assets/illustrations/h-04-wash-body.png
     - assets/branding/growup-app-icon.png
+    - assets/avatar_backgrounds/
 
 flutter_launcher_icons:
   android: true
