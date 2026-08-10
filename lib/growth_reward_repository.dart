@@ -203,6 +203,30 @@ class GrowthRewardRepository {
       icon: '🚸',
       spaceId: 'safety',
     ),
+    UnlockableItem(
+      id: 'bedroom_lamp_01',
+      name: '별빛 수면등',
+      type: UnlockableItemType.spaceItem,
+      category: 'bedroom',
+      icon: '🌙',
+      spaceId: 'bedroom',
+    ),
+    UnlockableItem(
+      id: 'bedroom_star_01',
+      name: '별 장식',
+      type: UnlockableItemType.spaceItem,
+      category: 'bedroom',
+      icon: '⭐',
+      spaceId: 'bedroom',
+    ),
+    UnlockableItem(
+      id: 'avatar_bag_01',
+      name: '초록 가방',
+      type: UnlockableItemType.avatarItem,
+      category: 'accessory',
+      icon: '🎒',
+      spaceId: null,
+    ),
   ];
 
   static const rewardByCardId = <String, String>{

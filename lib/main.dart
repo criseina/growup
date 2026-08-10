@@ -562,6 +562,20 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
   int _countFor(String level) =>
       _filteredRecords.where((record) => record['level'] == level).length;
 
+  int _countSince(int days, String level) => _records.where((record) {
+    final observedAt = DateTime.tryParse(record['observedAt'] as String);
+    return observedAt != null &&
+        !observedAt.isBefore(DateTime.now().subtract(Duration(days: days))) &&
+        record['level'] == level;
+  }).length;
+
+  String get _changeSummary {
+    final week = _countSince(7, 'independent');
+    final month = _countSince(30, 'independent');
+    if (month == 0) return '이번 달에는 아이가 편안한 속도로 새로운 행동을 만나고 있어요.';
+    return '최근 7일 혼자 해낸 행동 $week번 · 최근 30일 $month번이에요.';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -728,7 +742,7 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
     appBar: AppBar(
       title: const Text('내 성장 기록'),
       bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(122),
+        preferredSize: const Size.fromHeight(166),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Column(
@@ -739,6 +753,22 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
                 independent: _countFor('independent'),
                 withSupport: _countFor('withSupport'),
                 notYet: _countFor('notYet'),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xffeff8e9),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _changeSummary,
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
               const SizedBox(height: 8),
               SingleChildScrollView(

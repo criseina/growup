@@ -39,45 +39,51 @@ class _AvatarPageState extends State<AvatarPage> {
 
   @override
   Widget build(BuildContext context) {
-    const slots = ['hair', 'top', 'bottom', 'shoes', 'hat', 'accessory'];
+    const slots = ['hair', 'hat', 'top', 'bottom', 'shoes', 'accessory'];
     final avatarItems = _items
         .where((item) => item.type == UnlockableItemType.avatarItem)
         .toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('내 아바타')),
+      appBar: AppBar(title: const Text('아바타 꾸미기')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           Container(
-            height: 280,
+            height: 306,
             decoration: BoxDecoration(
               color: const Color(0xffeff8e9),
               borderRadius: BorderRadius.circular(28),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                Stack(
-                  alignment: Alignment.topCenter,
-                  children: [
-                    Image.asset(
-                      'assets/avatars/starter_child.png',
-                      height: 220,
-                    ),
-                    if (_equipped['hat'] != null)
-                      const Positioned(
-                        top: 0,
-                        child: Text('🧢', style: TextStyle(fontSize: 42)),
-                      ),
-                  ],
+                Image.asset('assets/avatars/starter_child.png', height: 258),
+                if (_equipped['hat'] != null)
+                  const Positioned(
+                    top: 26,
+                    child: Text('🧢', style: TextStyle(fontSize: 42)),
+                  ),
+                if (_equipped['accessory'] != null)
+                  const Positioned(
+                    right: 72,
+                    bottom: 42,
+                    child: Text('🎒', style: TextStyle(fontSize: 42)),
+                  ),
+                Positioned(
+                  bottom: 12,
+                  child: Text(
+                    _equipped.isEmpty
+                        ? '첫 독립 행동으로 꾸미기 아이템을 받아요'
+                        : '나만의 성장 모습을 꾸며 보세요',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
-                const Text('성장 모습을 보여주는 나의 친구'),
               ],
             ),
           ),
           const SizedBox(height: 22),
           const Text(
-            '꾸미기 아이템',
+            '꾸미기 항목',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
@@ -97,11 +103,11 @@ class _AvatarPageState extends State<AvatarPage> {
 
   String _slotTitle(String slot) => switch (slot) {
     'hair' => '머리',
+    'hat' => '모자',
     'top' => '상의',
     'bottom' => '하의',
     'shoes' => '신발',
-    'hat' => '모자',
-    _ => '액세서리',
+    _ => '가방·액세서리',
   };
 }
 
@@ -124,7 +130,7 @@ class _SlotRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 64,
+            width: 88,
             child: Text(
               title,
               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -132,9 +138,13 @@ class _SlotRow extends StatelessWidget {
           ),
           Expanded(
             child: items.isEmpty
-                ? const Text('아직 잠겨 있어요', style: TextStyle(color: Colors.grey))
+                ? const Text(
+                    '새 행동을 혼자 해보면 아이템이 열려요',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  )
                 : Wrap(
                     spacing: 8,
+                    runSpacing: 6,
                     children: items
                         .map(
                           (item) => ChoiceChip(
@@ -165,6 +175,14 @@ class _SpacePageState extends State<SpacePage> {
   List<UnlockableItem> _items = [];
   Map<String, List<String>> _placed = {};
   String _selectedSpace = 'bathroom';
+  static const spaces = <String, String>{
+    'bathroom': '욕실',
+    'playroom': '놀이방',
+    'kitchen': '주방',
+    'entrance': '현관',
+    'bedroom': '침실',
+    'safety': '안전 활동',
+  };
 
   @override
   void initState() {
@@ -190,13 +208,6 @@ class _SpacePageState extends State<SpacePage> {
 
   @override
   Widget build(BuildContext context) {
-    const spaces = {
-      'bathroom': '욕실',
-      'playroom': '놀이방',
-      'kitchen': '주방',
-      'entrance': '현관',
-      'safety': '안전 공간',
-    };
     final available = _items
         .where(
           (item) =>
@@ -206,7 +217,7 @@ class _SpacePageState extends State<SpacePage> {
         .toList();
     final placed = _placed[_selectedSpace] ?? const <String>[];
     return Scaffold(
-      appBar: AppBar(title: const Text('내 공간 꾸미기')),
+      appBar: AppBar(title: const Text('공간 꾸미기')),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -248,20 +259,26 @@ class _SpacePageState extends State<SpacePage> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
-                      children: available
-                          .where((item) => placed.contains(item.id))
-                          .map((item) => _SpaceItem(item: item))
-                          .toList(),
+                    const SizedBox(height: 10),
+                    Text(
+                      '${placed.length}개 아이템을 배치했어요',
+                      style: const TextStyle(color: Color(0xff28753c)),
                     ),
-                    if (available
-                        .where((item) => placed.contains(item.id))
-                        .isEmpty)
+                    const SizedBox(height: 24),
+                    if (placed.isEmpty)
                       const Expanded(
-                        child: Center(child: Text('잠금 해제한 아이템을 놓아 보세요.')),
+                        child: Center(
+                          child: Text('독립 행동을 해보면 이 공간의 아이템이 열려요.'),
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 18,
+                        runSpacing: 18,
+                        children: available
+                            .where((item) => placed.contains(item.id))
+                            .map((item) => _SpaceItem(item: item))
+                            .toList(),
                       ),
                   ],
                 ),
@@ -271,15 +288,15 @@ class _SpacePageState extends State<SpacePage> {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '놓을 수 있는 아이템',
+                '배치할 수 있는 아이템',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
             const SizedBox(height: 8),
             SizedBox(
-              height: 84,
+              height: 86,
               child: available.isEmpty
-                  ? const Center(child: Text('이 공간의 아이템은 아직 잠겨 있어요.'))
+                  ? const Center(child: Text('아직 열려 있는 아이템이 없어요'))
                   : ListView(
                       scrollDirection: Axis.horizontal,
                       children: available
@@ -324,8 +341,8 @@ Future<void> showGrowthCelebration(
   context: context,
   builder: (dialogContext) => AlertDialog(
     icon: Text(result.item.icon, style: const TextStyle(fontSize: 50)),
-    title: const Text('혼자 해냈어요!'),
-    content: Text('처음 혼자 해낸 성장 덕분에\n${result.item.name} 아이템이 생겼어요.'),
+    title: const Text('첫 혼자 성공이에요!'),
+    content: Text('처음 혼자 해낸 성장의 순간이에요.\n${result.item.name} 아이템이 열렸어요.'),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(dialogContext),

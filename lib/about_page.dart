@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'backup_page.dart';
+
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
 
@@ -8,7 +10,7 @@ class AboutPage extends StatelessWidget {
     appBar: AppBar(title: const Text('GrowUp 안내')),
     body: ListView(
       padding: const EdgeInsets.all(24),
-      children: const [
+      children: [
         Text(
           'GrowUp 프로토타입',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
@@ -21,6 +23,15 @@ class AboutPage extends StatelessWidget {
           body:
               '아이의 일상 행동을 혼자 했어요, 같이 했어요, 아직 해보지 않았어요로 가볍게 기록하고 성장 과정을 돌아볼 수 있어요.',
         ),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const BackupPage())),
+          icon: const Icon(Icons.cloud_done_outlined),
+          label: const Text('데이터 백업 및 가져오기'),
+        ),
+        const SizedBox(height: 28),
         _AboutSection(
           title: '기록은 어디에 저장되나요?',
           body:
