@@ -174,7 +174,7 @@ class GrowthRecordPage extends StatefulWidget {
 
 class _GrowthRecordPageState extends State<GrowthRecordPage> {
   List<Map<String, dynamic>> _records = [];
-  Map<String, String> _titles = {};
+  Map<String, ActionCard> _cardsById = {};
 
   @override
   void initState() {
@@ -189,9 +189,9 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
     final cards =
         (jsonDecode(cardsRaw) as Map<String, dynamic>)['cards']
             as List<dynamic>;
-    final titles = {
+    final cardById = {
       for (final card in cards.cast<Map<String, dynamic>>())
-        card['cardId'] as String: card['titleKo'] as String,
+        card['cardId'] as String: ActionCard.fromJson(card),
     };
     final records = raw == null
         ? <Map<String, dynamic>>[]
@@ -201,7 +201,7 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
               .toList();
     if (mounted) {
       setState(() {
-        _titles = titles;
+        _cardsById = cardById;
         _records = records;
       });
     }
@@ -236,14 +236,27 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
                   ? ''
                   : '${date.month}월 ${date.day}일 ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
               return ListTile(
+                onTap: () {
+                  final card = _cardsById[record['cardId']];
+                  if (card == null) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ParentCardPage(card: card, cardById: _cardsById),
+                    ),
+                  );
+                },
                 leading: const Icon(
                   Icons.favorite_outline,
                   color: Color(0xff55ae52),
                 ),
                 title: Text(
-                  _titles[record['cardId']] ?? record['cardId'] as String,
+                  _cardsById[record['cardId']]?.title ??
+                      record['cardId'] as String,
                 ),
                 subtitle: Text('${_level(record['level'] as String)}\n$time'),
+                trailing: const Icon(Icons.chevron_right),
               );
             },
           ),
