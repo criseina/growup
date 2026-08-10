@@ -45,7 +45,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('곰돌이와 내 공간'),
+      title: const Text('나의 성장 공간'),
       actions: [
         IconButton(
           tooltip: '아바타 꾸미기',
@@ -84,7 +84,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
                       onTap: _greet,
                       child: Semantics(
                         button: true,
-                        label: '곰돌이 아바타',
+                        label: '아이 아바타',
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -104,9 +104,10 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
                             AnimatedScale(
                               duration: const Duration(milliseconds: 180),
                               scale: _smiling ? 1.13 : 1,
-                              child: const Text(
-                                '🧸',
-                                style: TextStyle(fontSize: 108),
+                              child: Image.asset(
+                                'assets/avatars/starter_child.png',
+                                height: 290,
+                                fit: BoxFit.contain,
                               ),
                             ),
                             Text(

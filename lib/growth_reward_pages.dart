@@ -49,7 +49,7 @@ class _AvatarPageState extends State<AvatarPage> {
         padding: const EdgeInsets.all(20),
         children: [
           Container(
-            height: 210,
+            height: 280,
             decoration: BoxDecoration(
               color: const Color(0xffeff8e9),
               borderRadius: BorderRadius.circular(28),
@@ -57,19 +57,20 @@ class _AvatarPageState extends State<AvatarPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  '${_equipped['hat'] == null ? '' : '🧢 '}🙂',
-                  style: const TextStyle(fontSize: 76),
+                Stack(
+                  alignment: Alignment.topCenter,
+                  children: [
+                    Image.asset(
+                      'assets/avatars/starter_child.png',
+                      height: 220,
+                    ),
+                    if (_equipped['hat'] != null)
+                      const Positioned(
+                        top: 0,
+                        child: Text('🧢', style: TextStyle(fontSize: 42)),
+                      ),
+                  ],
                 ),
-                Text(
-                  [
-                    _equipped['top'] == null ? '기본 상의' : '👕',
-                    _equipped['bottom'] == null ? '기본 하의' : '👖',
-                    _equipped['shoes'] == null ? '기본 신발' : '👟',
-                  ].join('  '),
-                  style: const TextStyle(fontSize: 22),
-                ),
-                const SizedBox(height: 8),
                 const Text('성장 모습을 보여주는 나의 친구'),
               ],
             ),
