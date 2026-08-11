@@ -60,11 +60,62 @@ class GrowthUnlockResult {
   final UnlockableItem item;
 }
 
+class SpacePlacement {
+  const SpacePlacement({
+    required this.id,
+    required this.profileId,
+    required this.spaceId,
+    required this.itemId,
+    required this.x,
+    required this.y,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String profileId;
+  final String spaceId;
+  final String itemId;
+  final double x;
+  final double y;
+  final DateTime createdAt;
+
+  factory SpacePlacement.fromJson(Map<String, dynamic> json) => SpacePlacement(
+    id: json['id'] as String,
+    profileId: json['profileId'] as String,
+    spaceId: json['spaceId'] as String,
+    itemId: json['itemId'] as String,
+    x: (json['x'] as num).toDouble(),
+    y: (json['y'] as num).toDouble(),
+    createdAt: DateTime.parse(json['createdAt'] as String),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'profileId': profileId,
+    'spaceId': spaceId,
+    'itemId': itemId,
+    'x': x,
+    'y': y,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  SpacePlacement copyWith({double? x, double? y}) => SpacePlacement(
+    id: id,
+    profileId: profileId,
+    spaceId: spaceId,
+    itemId: itemId,
+    x: x ?? this.x,
+    y: y ?? this.y,
+    createdAt: createdAt,
+  );
+}
+
 class GrowthRewardRepository {
   static const _eventsKey = 'growth_events_v1';
   static const _unlockedKey = 'unlocked_items_v1';
   static const _avatarKey = 'avatar_state_v1';
   static const _spaceKey = 'space_state_v1';
+  static const _placementsKey = 'space_placements_v2';
 
   static const items = <UnlockableItem>[
     UnlockableItem(
@@ -346,6 +397,98 @@ class GrowthRewardRepository {
     decoded[key] = placed.toList();
     await preferences.setString(_spaceKey, jsonEncode(decoded));
   }
+
+  Future<List<SpacePlacement>> loadPlacements({
+    required String profileId,
+    required String spaceId,
+  }) async {
+    final preferences = await SharedPreferences.getInstance();
+    final placements = _decodePlacements(preferences.getString(_placementsKey));
+    final result = placements
+        .where((placement) => placement.profileId == profileId && placement.spaceId == spaceId)
+        .toList();
+    if (result.isNotEmpty) return result;
+
+    // Migrate the previous toggle-only placements once, preserving earned work.
+    final legacy = _decodeStringMap(preferences.getString(_spaceKey));
+    final legacyIds = legacy['$profileId:$spaceId'] ?? const <String>[];
+    if (legacyIds.isEmpty) return result;
+    final migrated = <SpacePlacement>[
+      for (var index = 0; index < legacyIds.length; index++)
+        SpacePlacement(
+          id: 'placement-$profileId-$spaceId-${legacyIds[index]}',
+          profileId: profileId,
+          spaceId: spaceId,
+          itemId: legacyIds[index],
+          x: .16 + (index % 3) * .25,
+          y: .62 + (index ~/ 3) * .12,
+          createdAt: DateTime.now(),
+        ),
+    ];
+    placements.addAll(migrated);
+    await _savePlacements(preferences, placements);
+    return migrated;
+  }
+
+  Future<void> savePlacement(SpacePlacement placement) async {
+    final preferences = await SharedPreferences.getInstance();
+    final placements = _decodePlacements(preferences.getString(_placementsKey));
+    final index = placements.indexWhere((item) => item.id == placement.id);
+    if (index == -1) {
+      placements.add(placement);
+    } else {
+      placements[index] = placement;
+    }
+    await _savePlacements(preferences, placements);
+  }
+
+  Future<SpacePlacement> placeItem({
+    required String profileId,
+    required String spaceId,
+    required String itemId,
+    required double x,
+    required double y,
+  }) async {
+    final placements = await loadPlacements(profileId: profileId, spaceId: spaceId);
+    final matches = placements.where((item) => item.itemId == itemId).toList();
+    final existing = matches.isEmpty ? null : matches.first;
+    final clampedX = x.clamp(.04, .88).toDouble();
+    final clampedY = y.clamp(.10, .78).toDouble();
+    final placement = existing?.copyWith(x: clampedX, y: clampedY) ??
+        SpacePlacement(
+          id: 'placement-$profileId-$spaceId-$itemId',
+          profileId: profileId,
+          spaceId: spaceId,
+          itemId: itemId,
+          x: clampedX,
+          y: clampedY,
+          createdAt: DateTime.now(),
+        );
+    await savePlacement(placement);
+    return placement;
+  }
+
+  Future<void> removePlacement(String placementId) async {
+    final preferences = await SharedPreferences.getInstance();
+    final placements = _decodePlacements(preferences.getString(_placementsKey))
+      ..removeWhere((item) => item.id == placementId);
+    await _savePlacements(preferences, placements);
+  }
+
+  Future<void> _savePlacements(
+    SharedPreferences preferences,
+    List<SpacePlacement> placements,
+  ) => preferences.setString(
+    _placementsKey,
+    jsonEncode(placements.map((item) => item.toJson()).toList()),
+  );
+
+  List<SpacePlacement> _decodePlacements(String? raw) => raw == null
+      ? <SpacePlacement>[]
+      : (jsonDecode(raw) as List<dynamic>)
+            .cast<Map<String, dynamic>>()
+            .map(SpacePlacement.fromJson)
+            .toList();
 
   List<GrowthEvent> _decodeEvents(String? raw) => raw == null
       ? <GrowthEvent>[]
