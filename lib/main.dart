@@ -176,7 +176,6 @@ class _HomePageState extends State<HomePage> {
     final levels = saved == null
         ? <String, dynamic>{}
         : Map<String, dynamic>.from(jsonDecode(saved) as Map<String, dynamic>);
-    final previous = levels[card.id] as String?;
     levels[card.id] = level.name;
     await preferences.setString(
       '${levelKey}_${_activeProfile.id}',
@@ -193,15 +192,9 @@ class _HomePageState extends State<HomePage> {
       'observedAt': DateTime.now().toIso8601String(),
     });
     await preferences.setString(historyKey, jsonEncode(history));
-    GrowthUnlockResult? result;
-    if (level == IndependenceLevel.independent && previous != 'independent') {
-      result = await GrowthRewardRepository().unlockFirstIndependent(
-        profileId: _activeProfile.id,
-        cardId: card.id,
-      );
-    }
     await _loadRecommendation(_activeProfile);
-    return result;
+    // 아이의 선택은 기록하지만 보상은 부모 확인 뒤에만 지급합니다.
+    return null;
   }
 
   void _openGrowthStudio() {
@@ -302,30 +295,27 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 16),
             if (_recommendation != null)
               Expanded(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: _TodayRecommendation(
-                    card: _recommendation!,
-                    reason: _recommendationReason,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ChildCardPage(
-                          card: _recommendation!,
-                          initialLevel: null,
-                          profileId: _activeProfile.id,
-                          onOpenParentMode: () =>
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(
-                                  builder: (_) => ParentCardPage(
-                                    card: _recommendation!,
-                                    cardById: _recommendationCardsById,
-                                    profileId: _activeProfile.id,
-                                  ),
+                child: _TodayRecommendation(
+                  card: _recommendation!,
+                  reason: _recommendationReason,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ChildCardPage(
+                        card: _recommendation!,
+                        initialLevel: null,
+                        profileId: _activeProfile.id,
+                        onOpenParentMode: () =>
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (_) => ParentCardPage(
+                                  card: _recommendation!,
+                                  cardById: _recommendationCardsById,
+                                  profileId: _activeProfile.id,
                                 ),
                               ),
-                          onLevelSelected: (level) =>
-                              _saveRecommendationLevel(_recommendation!, level),
-                        ),
+                            ),
+                        onLevelSelected: (level) =>
+                            _saveRecommendationLevel(_recommendation!, level),
                       ),
                     ),
                   ),
@@ -434,19 +424,31 @@ class _HomeNavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
-    borderRadius: BorderRadius.circular(12),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    borderRadius: BorderRadius.circular(16),
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xffe0f2dc) : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: const Color(0xff28753c), size: selected ? 27 : 24),
+          Icon(
+            icon,
+            color: selected ? const Color(0xff176a36) : const Color(0xff7b867d),
+            size: selected ? 30 : 23,
+          ),
           const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(
+              color: selected
+                  ? const Color(0xff176a36)
+                  : const Color(0xff7b867d),
               fontSize: 11,
-              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
             ),
           ),
         ],
@@ -1100,7 +1102,6 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     ActionCard card,
     IndependenceLevel level,
   ) async {
-    final previous = _levels[card.id];
     setState(() => _levels[card.id] = level);
     final preferences = await SharedPreferences.getInstance();
     final encoded = _levels.map((id, value) => MapEntry(id, value.name));
@@ -1120,13 +1121,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     });
     if (history.length > 100) history.removeRange(0, history.length - 100);
     await preferences.setString(_observationStorageKey, jsonEncode(history));
-    if (level == IndependenceLevel.independent &&
-        previous != IndependenceLevel.independent) {
-      return GrowthRewardRepository().unlockFirstIndependent(
-        profileId: widget.profileId,
-        cardId: card.id,
-      );
-    }
+    // 아이의 선택은 기록하지만 보상은 부모 확인 뒤에만 지급합니다.
     return null;
   }
 
@@ -1475,6 +1470,10 @@ class _ChildCardPageState extends State<ChildCardPage> {
           result: result,
           profileId: widget.profileId,
         );
+      } else if (mounted && level == IndependenceLevel.independent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('기록했어요. 부모님과 함께 확인해 볼까요?')),
+        );
       }
     } else {
       Navigator.pop(context, level);
@@ -1523,17 +1522,17 @@ class _ChildCardPageState extends State<ChildCardPage> {
                 const SizedBox(height: 28),
                 Row(
                   children: [
-                    _ChildStatusButton(
+                    _ChildStatusButton2(
                       level: IndependenceLevel.independent,
                       selected: _selected,
                       onTap: () => _select(IndependenceLevel.independent),
                     ),
-                    _ChildStatusButton(
+                    _ChildStatusButton2(
                       level: IndependenceLevel.withSupport,
                       selected: _selected,
                       onTap: () => _select(IndependenceLevel.withSupport),
                     ),
-                    _ChildStatusButton(
+                    _ChildStatusButton2(
                       level: IndependenceLevel.notYet,
                       selected: _selected,
                       onTap: () => _select(IndependenceLevel.notYet),
@@ -1612,6 +1611,7 @@ class ParentCardPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             _GrowthUnlockStatus(cardId: card.id, profileId: profileId),
+            _ParentRewardConfirmation(cardId: card.id, profileId: profileId),
             const Divider(height: 36),
             Text('성공 기준', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
@@ -1677,6 +1677,144 @@ class ParentCardPage extends StatelessWidget {
     );
   }
 }
+
+class _ParentRewardConfirmation extends StatefulWidget {
+  const _ParentRewardConfirmation({
+    required this.cardId,
+    required this.profileId,
+  });
+  final String cardId;
+  final String profileId;
+
+  @override
+  State<_ParentRewardConfirmation> createState() =>
+      _ParentRewardConfirmationState();
+}
+
+class _ParentRewardConfirmationState extends State<_ParentRewardConfirmation> {
+  bool? _hasIndependentReport;
+  bool _confirming = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    final raw = preferences.getString('action_observations_v1');
+    final reports = raw == null
+        ? const <dynamic>[]
+        : jsonDecode(raw) as List<dynamic>;
+    final hasReport = reports.any((item) {
+      final record = item as Map<String, dynamic>;
+      return record['cardId'] == widget.cardId &&
+          (record['profileId'] ?? ProfileRepository.defaultProfileId) ==
+              widget.profileId &&
+          record['level'] == IndependenceLevel.independent.name;
+    });
+    final events = await GrowthRewardRepository().loadEvents(widget.profileId);
+    if (mounted) {
+      setState(
+        () => _hasIndependentReport =
+            hasReport && !events.any((event) => event.cardId == widget.cardId),
+      );
+    }
+  }
+
+  Future<void> _confirm() async {
+    setState(() => _confirming = true);
+    final result = await GrowthRewardRepository().unlockFirstIndependent(
+      profileId: widget.profileId,
+      cardId: widget.cardId,
+    );
+    if (!mounted) return;
+    setState(() {
+      _confirming = false;
+      _hasIndependentReport = false;
+    });
+    if (result != null) {
+      await showParentConfirmedCelebration(
+        context,
+        result: result,
+        profileId: widget.profileId,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hasIndependentReport != true) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xffeff8e9),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '부모님 확인',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Color(0xff28753c),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '아이가 혼자 해냈다고 기록했어요. 실제로 관찰하셨다면 보상을 열어 주세요.',
+            style: TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: _confirming ? null : _confirm,
+            icon: const Icon(Icons.verified_outlined),
+            label: Text(_confirming ? '확인 중…' : '관찰 후 아이템 열기'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> showParentConfirmedCelebration(
+  BuildContext context, {
+  required GrowthUnlockResult result,
+  required String profileId,
+}) => showDialog<void>(
+  context: context,
+  builder: (dialogContext) => AlertDialog(
+    icon: Text(result.item.icon, style: const TextStyle(fontSize: 50)),
+    title: const Text('혼자 해냈어요'),
+    content: Text('아이의 노력으로 ${result.item.name} 아이템을 얻었어요.'),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(dialogContext),
+        child: const Text('나중에 보기'),
+      ),
+      FilledButton(
+        onPressed: () {
+          Navigator.pop(dialogContext);
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => result.item.type == UnlockableItemType.avatarItem
+                  ? AvatarPage(profileId: profileId)
+                  : SpacePage(profileId: profileId),
+            ),
+          );
+        },
+        child: Text(
+          result.item.type == UnlockableItemType.avatarItem
+              ? '아바타 꾸미기'
+              : '공간 꾸미기',
+        ),
+      ),
+    ],
+  ),
+);
 
 class _GrowthUnlockStatus extends StatelessWidget {
   const _GrowthUnlockStatus({required this.cardId, required this.profileId});
@@ -1928,6 +2066,8 @@ class ActionIllustration extends StatelessWidget {
   };
 }
 
+// Legacy visual kept temporarily for comparison with the updated child wording.
+// ignore: unused_element
 class _ChildStatusButton extends StatelessWidget {
   const _ChildStatusButton({
     required this.level,
@@ -2000,6 +2140,83 @@ class _ChildStatusButton extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontWeight: FontWeight.normal),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChildStatusButton2 extends StatelessWidget {
+  const _ChildStatusButton2({
+    required this.level,
+    required this.selected,
+    required this.onTap,
+  });
+  final IndependenceLevel level;
+  final IndependenceLevel? selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, icon, label) = switch (level) {
+      IndependenceLevel.independent => (
+        const Color(0xff55ae52),
+        Icons.sentiment_satisfied_alt,
+        '혼자\n할 수 있어요',
+      ),
+      IndependenceLevel.withSupport => (
+        const Color(0xffffc63d),
+        Icons.group,
+        '도와주면\n할 수 있어요',
+      ),
+      IndependenceLevel.notYet => (
+        const Color(0xffc9c9c4),
+        Icons.question_mark,
+        '아직\n안 해봤어요',
+      ),
+    };
+    final selectedNow = selected == level;
+    final dimmed = selected != null && !selectedNow;
+    return Expanded(
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutBack,
+        scale: dimmed
+            ? .8
+            : selectedNow
+            ? 1.1
+            : 1,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(60),
+          child: Column(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: EdgeInsets.all(selectedNow ? 6 : 0),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: selectedNow ? color.withValues(alpha: .18) : null,
+                  boxShadow: selectedNow
+                      ? [
+                          BoxShadow(
+                            color: color.withValues(alpha: .35),
+                            blurRadius: 16,
+                            spreadRadius: 3,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: CircleAvatar(
+                  radius: 42,
+                  backgroundColor: color,
+                  child: Icon(icon, color: Colors.white, size: 42),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(label, textAlign: TextAlign.center),
             ],
           ),
         ),
