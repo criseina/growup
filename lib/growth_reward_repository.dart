@@ -237,8 +237,9 @@ class GrowthRewardRepository {
     'C-01': 'avatar_top_01',
     'C-02': 'avatar_bottom_01',
     'C-03': 'avatar_shoes_01',
-    'C-04': 'entrance_shoe_rack_01',
-    'C-05': 'avatar_hat_01',
+    // 옷 입기는 침실 테마의 꾸미기 보상과 연결합니다.
+    'C-04': 'bedroom_lamp_01',
+    'C-05': 'bedroom_star_01',
     'M-01': 'kitchen_cup_01',
     'M-02': 'kitchen_table_01',
     'M-03': 'avatar_accessory_01',
