@@ -165,15 +165,40 @@ class _SpacePageState extends State<SpacePage> {
 
   Future<void> _accept(Object data, Offset offset) async {
     final point = _relative(offset);
+    final itemId = data is UnlockableItem
+        ? data.id
+        : data is SpacePlacement
+            ? data.itemId
+            : '';
+    final slot = _slotFor(itemId, point);
     if (data is UnlockableItem) {
-      await _repository.placeItem(profileId: widget.profileId, spaceId: _spaceId, itemId: data.id, x: point.x, y: point.y);
+      await _repository.placeItem(profileId: widget.profileId, spaceId: _spaceId, itemId: data.id, x: slot.x, y: slot.y);
     } else if (data is SpacePlacement) {
-      await _repository.placeItem(profileId: widget.profileId, spaceId: _spaceId, itemId: data.itemId, x: point.x, y: point.y);
+      await _repository.placeItem(profileId: widget.profileId, spaceId: _spaceId, itemId: data.itemId, x: slot.x, y: slot.y);
     }
     if (!mounted) return;
     setState(() => _selectedPlacement = null);
     await _load();
   }
+
+  // Dollhouse furniture slots: drops snap to an intentional surface instead
+  // of allowing objects to float at arbitrary screen coordinates.
+  ({double x, double y}) _slotFor(String itemId, ({double x, double y}) point) => switch (itemId) {
+        'bathroom_soap_01' => (x: .67, y: .44),
+        'bathroom_toothbrush_01' => (x: .76, y: .44),
+        'bathroom_towel_01' => (x: .84, y: .31),
+        'playroom_toybox_01' => (x: .31, y: .67),
+        'playroom_shelf_01' => (x: .74, y: .40),
+        'kitchen_cup_01' => (x: .61, y: .53),
+        'kitchen_table_01' => (x: .52, y: .58),
+        'entrance_bag_01' => (x: .27, y: .56),
+        'entrance_shoe_rack_01' => (x: .72, y: .61),
+        'bedroom_lamp_01' => (x: .72, y: .43),
+        'bedroom_star_01' => (x: .58, y: .23),
+        'safety_car_01' => (x: .74, y: .62),
+        'safety_cone_01' => (x: .51, y: .67),
+        _ => (x: point.x.clamp(.12, .78), y: point.y.clamp(.26, .72)),
+      };
 
   Future<void> _removeSelected() async {
     final selected = _selectedPlacement;
@@ -263,8 +288,39 @@ class _ItemToken extends StatelessWidget {
         width: 58,
         height: 58,
         decoration: BoxDecoration(color: highlighted ? const Color(0xffffedb8) : Colors.white.withValues(alpha: .92), borderRadius: BorderRadius.circular(14), border: Border.all(color: highlighted ? const Color(0xffe6a921) : const Color(0xffd7ded2), width: highlighted ? 2 : 1), boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 5, offset: Offset(0, 2))]),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(item?.icon ?? '\uD83D\uDCE6', style: const TextStyle(fontSize: 27)), Text(item?.name ?? '', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 8))]),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [_SpaceSprite(itemId: item?.id), Text(item?.name ?? '', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 8))]),
       );
+}
+
+class _SpaceSprite extends StatelessWidget {
+  const _SpaceSprite({required this.itemId, this.size = 44});
+  final String? itemId;
+  final double size;
+  @override
+  Widget build(BuildContext context) {
+    final cell = switch (itemId) {
+      'bathroom_soap_01' => (-1.0, -1.0),
+      'bathroom_toothbrush_01' => (0.0, -1.0),
+      'bathroom_towel_01' => (1.0, -1.0),
+      'playroom_toybox_01' => (-1.0, 1.0),
+      'kitchen_cup_01' => (0.0, 1.0),
+      'entrance_bag_01' => (1.0, 1.0),
+      _ => null,
+    };
+    if (cell == null) return Text(itemId == null ? '\uD83D\uDCE6' : '\u2728', style: TextStyle(fontSize: size * .62));
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ClipRect(
+        child: Align(
+          alignment: Alignment(cell.$1, cell.$2),
+          widthFactor: 1 / 3,
+          heightFactor: 1 / 2,
+          child: Image.asset('assets/space_items/room_items.png', width: size * 3, height: size * 2, fit: BoxFit.fill),
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> showGrowthCelebration(BuildContext context, {required GrowthUnlockResult result, required String profileId}) => showDialog<void>(

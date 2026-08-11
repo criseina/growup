@@ -282,6 +282,21 @@ class _WorldScene extends StatelessWidget {
                 AnimatedPositioned(
                   duration: const Duration(milliseconds: 900),
                   curve: Curves.easeInOutCubic,
+                  left: (x * width - 48).clamp(6, width - 96).toDouble(),
+                  top: (y * height + 12).clamp(height * .34, height - 58).toDouble(),
+                  child: Container(
+                    width: 96,
+                    height: 17,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: .22),
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                  ),
+                ),
+              if (visible)
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeInOutCubic,
                   left: (x * width - 78).clamp(6, width - 156).toDouble(),
                   top: (y * height - 205).clamp(height * .20, height - 300).toDouble(),
                   child: _LivingAvatar(
@@ -361,9 +376,32 @@ class _PlacedVisual extends StatelessWidget {
   Widget build(BuildContext context) {
     final matches = GrowthRewardRepository.items.where((item) => item.id == placement.itemId).toList();
     final item = matches.isEmpty ? null : matches.first;
-    return DecoratedBox(
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: .86), borderRadius: BorderRadius.circular(12)),
-      child: Padding(padding: const EdgeInsets.all(6), child: Text(item?.icon ?? '\uD83D\uDCE6', style: const TextStyle(fontSize: 26))),
+    return SizedBox(width: 58, height: 58, child: _WorldItemSprite(itemId: item?.id));
+  }
+}
+
+class _WorldItemSprite extends StatelessWidget {
+  const _WorldItemSprite({required this.itemId});
+  final String? itemId;
+  @override
+  Widget build(BuildContext context) {
+    final cell = switch (itemId) {
+      'bathroom_soap_01' => (-1.0, -1.0),
+      'bathroom_toothbrush_01' => (0.0, -1.0),
+      'bathroom_towel_01' => (1.0, -1.0),
+      'playroom_toybox_01' => (-1.0, 1.0),
+      'kitchen_cup_01' => (0.0, 1.0),
+      'entrance_bag_01' => (1.0, 1.0),
+      _ => null,
+    };
+    if (cell == null) return const Center(child: Text('\u2728', style: TextStyle(fontSize: 31)));
+    return ClipRect(
+      child: Align(
+        alignment: Alignment(cell.$1, cell.$2),
+        widthFactor: 1 / 3,
+        heightFactor: 1 / 2,
+        child: Image.asset('assets/space_items/room_items.png', width: 174, height: 116, fit: BoxFit.fill),
+      ),
     );
   }
 }
