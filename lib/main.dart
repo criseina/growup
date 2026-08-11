@@ -2054,6 +2054,15 @@ class ActionIllustration extends StatelessWidget {
     'H-02' => 'assets/illustrations/h-02-brush-teeth.png',
     'H-03' => 'assets/illustrations/h-03-wash-face.png',
     'H-04' => 'assets/illustrations/h-04-wash-body.png',
+    _ => _categoryAssetPath,
+  };
+
+  String? get _categoryAssetPath => switch (card.category) {
+    'dressing' => 'assets/illustrations/dressing-actions.png',
+    'meals' => 'assets/illustrations/meal-actions.png',
+    'belongings_home' => 'assets/illustrations/home-actions.png',
+    'outing' => 'assets/illustrations/outing-actions.png',
+    'safety_help' => 'assets/illustrations/safety-actions.png',
     _ => null,
   };
   IconData _iconFor(String category) => switch (category) {
