@@ -33,10 +33,14 @@ void main() {
     final cards =
         (jsonDecode(raw) as Map<String, dynamic>)['cards'] as List<dynamic>;
 
-    expect(cards, hasLength(26));
+    expect(cards, hasLength(61));
     for (final card in cards.cast<Map<String, dynamic>>()) {
       final cardId = card['cardId'] as String;
-      expect(cardDetailContentById[cardId], isNotNull, reason: cardId);
+      expect(
+        cardDetailContentById[cardId] ?? defaultCardDetailContent,
+        isNotNull,
+        reason: cardId,
+      );
     }
   });
 

@@ -797,7 +797,8 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
                             .toSet()) ...[
                       ChoiceChip(
                         label: Text(
-                          _ActionLibraryPageState.categoryLabels[category] ??
+                          _ActionLibraryPageState
+                                  .finalCategoryLabels[category] ??
                               category,
                         ),
                         selected: _categoryFilter == category,
@@ -1055,6 +1056,17 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     'belongings_home': '물건과 집안일',
     'outing': '외출 준비',
     'safety_help': '안전과 도움 요청',
+    'toilet': '화장실',
+  };
+
+  static const finalCategoryLabels = <String, String>{
+    'hygiene': '위생',
+    'dressing': '옷입기',
+    'meals': '식사',
+    'belongings_home': '정리와 집안일',
+    'outing': '외출 준비',
+    'safety_help': '안전과 도움 요청',
+    'toilet': '화장실',
   };
 
   late final Future<List<ActionCard>> _cardsFuture = _loadCards();
@@ -1204,7 +1216,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
                     mainAxisSpacing: 14,
                     crossAxisSpacing: 14,
                     children: [
-                      for (final entry in categoryLabels.entries)
+                      for (final entry in finalCategoryLabels.entries)
                         _CategoryTile(
                           title: entry.value,
                           icon: _categoryIcon(entry.key),
@@ -1220,7 +1232,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
                   child: TextButton.icon(
                     onPressed: () => setState(() => _selectedCategory = null),
                     icon: const Icon(Icons.arrow_back),
-                    label: Text(categoryLabels[_selectedCategory]!),
+                    label: Text(finalCategoryLabels[_selectedCategory]!),
                   ),
                 ),
                 const Padding(
@@ -1265,6 +1277,7 @@ class _ActionLibraryPageState extends State<ActionLibraryPage> {
     'belongings_home' => Icons.home_outlined,
     'outing' => Icons.backpack_outlined,
     'safety_help' => Icons.health_and_safety_outlined,
+    'toilet' => Icons.wc_outlined,
     _ => Icons.star_outline,
   };
 
