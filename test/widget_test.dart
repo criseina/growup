@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:growup/avatar_reward_catalog.dart';
+import 'package:growup/avatar_room.dart';
 import 'package:growup/card_detail_content.dart';
 import 'package:growup/growth_reward_repository.dart';
 import 'package:growup/main.dart';
@@ -107,5 +109,44 @@ void main() {
       const Offset(-260, 0),
     );
     expect(openedParentMode, isTrue);
+  });
+
+  test('all action cards map to a valid avatar reward', () async {
+    final raw = await rootBundle.loadString('data/action_cards_v1.json');
+    final cards = (jsonDecode(raw) as Map<String, dynamic>)['cards'] as List;
+    final itemIds = avatarRewardItems.map((item) => item.id).toSet();
+
+    expect(avatarRewardByCardId.length, cards.length);
+    for (final card in cards.cast<Map<String, dynamic>>()) {
+      final rewardId = avatarRewardByCardId[card['cardId']];
+      expect(rewardId, isNotNull, reason: '${card['cardId']} 보상 누락');
+      expect(itemIds, contains(rewardId));
+    }
+  });
+
+  test('all six rooms have walking, fixed objects and theme-only slots', () {
+    expect(avatarRooms, hasLength(6));
+    final spaceItems = avatarRewardItems.where(
+      (item) => item.type == UnlockableItemType.spaceItem,
+    );
+    for (final room in avatarRooms) {
+      expect(room.walkableArea.polygon.length, greaterThanOrEqualTo(4));
+      expect(room.fixedObjects, isNotEmpty);
+      expect(room.slots, isNotEmpty);
+      final allowedIds = room.slots
+          .expand((slot) => slot.allowedItemIds)
+          .toSet();
+      final roomItemIds = spaceItems
+          .where((item) => item.spaceId == room.id)
+          .map((item) => item.id)
+          .toSet();
+      expect(allowedIds, containsAll(roomItemIds));
+      expect(
+        room.slots.every(
+          (slot) => slot.allowedItemIds.every(roomItemIds.contains),
+        ),
+        isTrue,
+      );
+    }
   });
 }

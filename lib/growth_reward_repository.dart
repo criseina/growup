@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'avatar_reward_catalog.dart';
+
 enum UnlockableItemType { avatarItem, spaceItem }
 
 class UnlockableItem {
@@ -117,7 +119,10 @@ class GrowthRewardRepository {
   static const _spaceKey = 'space_state_v1';
   static const _placementsKey = 'space_placements_v2';
 
-  static const items = <UnlockableItem>[
+  static const items = avatarRewardItems;
+  static const rewardByCardId = avatarRewardByCardId;
+
+  static const legacyItems = <UnlockableItem>[
     UnlockableItem(
       id: 'bathroom_soap_01',
       name: '거품 비누',
@@ -280,7 +285,7 @@ class GrowthRewardRepository {
     ),
   ];
 
-  static const rewardByCardId = <String, String>{
+  static const legacyRewardByCardId = <String, String>{
     'H-01': 'bathroom_soap_01',
     'H-02': 'bathroom_toothbrush_01',
     'H-03': 'bathroom_towel_01',
@@ -311,8 +316,10 @@ class GrowthRewardRepository {
   };
 
   UnlockableItem? itemForCard(String cardId) {
-    final id = rewardByCardId[cardId];
-    return id == null ? null : items.where((item) => item.id == id).first;
+    final id = avatarRewardByCardId[cardId];
+    return id == null
+        ? null
+        : avatarRewardItems.where((item) => item.id == id).first;
   }
 
   Future<GrowthUnlockResult?> unlockFirstIndependent({
@@ -357,7 +364,7 @@ class GrowthRewardRepository {
     final ids =
         _decodeStringMap(preferences.getString(_unlockedKey))[profileId] ??
         const <String>[];
-    return items.where((item) => ids.contains(item.id)).toList();
+    return avatarRewardItems.where((item) => ids.contains(item.id)).toList();
   }
 
   Future<Map<String, String>> loadAvatar(String profileId) async {
@@ -405,7 +412,10 @@ class GrowthRewardRepository {
     final preferences = await SharedPreferences.getInstance();
     final placements = _decodePlacements(preferences.getString(_placementsKey));
     final result = placements
-        .where((placement) => placement.profileId == profileId && placement.spaceId == spaceId)
+        .where(
+          (placement) =>
+              placement.profileId == profileId && placement.spaceId == spaceId,
+        )
         .toList();
     if (result.isNotEmpty) return result;
 
@@ -449,12 +459,25 @@ class GrowthRewardRepository {
     required double x,
     required double y,
   }) async {
-    final placements = await loadPlacements(profileId: profileId, spaceId: spaceId);
+    final matchingItems = avatarRewardItems.where((item) => item.id == itemId);
+    final catalogItem = matchingItems.isEmpty ? null : matchingItems.first;
+    if (catalogItem == null || catalogItem.spaceId != spaceId) {
+      throw ArgumentError.value(
+        itemId,
+        'itemId',
+        '획득 오브젝트는 지정된 테마에만 배치할 수 있습니다.',
+      );
+    }
+    final placements = await loadPlacements(
+      profileId: profileId,
+      spaceId: spaceId,
+    );
     final matches = placements.where((item) => item.itemId == itemId).toList();
     final existing = matches.isEmpty ? null : matches.first;
     final clampedX = x.clamp(.04, .88).toDouble();
     final clampedY = y.clamp(.10, .78).toDouble();
-    final placement = existing?.copyWith(x: clampedX, y: clampedY) ??
+    final placement =
+        existing?.copyWith(x: clampedX, y: clampedY) ??
         SpacePlacement(
           id: 'placement-$profileId-$spaceId-$itemId',
           profileId: profileId,

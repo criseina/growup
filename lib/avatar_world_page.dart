@@ -3,27 +3,13 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'avatar_object_sprite.dart';
 import 'avatar_room.dart';
 import 'growth_reward_pages.dart';
 import 'growth_reward_repository.dart';
 import 'main.dart' show ActionLibraryPage, GrowthRecordPage, HomePage;
 
-enum _AvatarAction {
-  lookAround,
-  walk,
-  rest,
-  wave,
-  celebrate,
-  washHands,
-  brushTeeth,
-  dryHands,
-  play,
-  drink,
-  packBag,
-  stargaze,
-  safetyStop,
-  touchJump,
-}
+enum _AvatarPose { front, back, left, right, use, wipe, organize, wave }
 
 class AvatarWorldPage extends StatefulWidget {
   const AvatarWorldPage({super.key, required this.profileId});
@@ -34,250 +20,277 @@ class AvatarWorldPage extends StatefulWidget {
 }
 
 class _AvatarWorldPageState extends State<AvatarWorldPage>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   final _repository = GrowthRewardRepository();
+  final _pageController = PageController();
   final _random = Random();
-  final _controller = PageController();
-  final _recent = <_AvatarAction>[];
   late final AnimationController _motion = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 850),
+    duration: const Duration(milliseconds: 700),
   )..repeat(reverse: true);
 
-  Timer? _timer;
-  int _page = 0;
-  _AvatarAction _action = _AvatarAction.lookAround;
-  bool _isTouchReaction = false;
-  RoomPoint _position = const RoomPoint(50, 72);
-  InteractiveObject? _nearbyObject;
+  Timer? _autonomyTimer;
+  Timer? _arrivalTimer;
+  Timer? _interactionTimer;
+  int _roomIndex = 0;
+  RoomPoint _position = const RoomPoint(50, 77);
+  _AvatarPose _pose = _AvatarPose.front;
+  bool _moving = false;
+  String? _bubble;
+  RoomObject? _activeObject;
   List<SpacePlacement> _placements = [];
   Map<String, String> _equipped = {};
 
-  AvatarRoom get _room => avatarRooms[_page];
-  String get _spaceId => _room.id;
+  AvatarRoom get _room => avatarRooms[_roomIndex];
 
   @override
   void initState() {
     super.initState();
-    _load();
-    _schedule();
+    _loadRoom();
+    _scheduleAutonomy();
   }
 
-  Future<void> _load() async {
-    final result = await Future.wait<Object>([
+  Future<void> _loadRoom() async {
+    final loaded = await Future.wait<Object>([
       _repository.loadPlacements(
         profileId: widget.profileId,
-        spaceId: _spaceId,
+        spaceId: _room.id,
       ),
       _repository.loadAvatar(widget.profileId),
     ]);
     if (!mounted) return;
     setState(() {
-      _placements = result[0] as List<SpacePlacement>;
-      _equipped = result[1] as Map<String, String>;
+      _placements = loaded[0] as List<SpacePlacement>;
+      _equipped = loaded[1] as Map<String, String>;
     });
   }
 
-  void _schedule({bool quick = false}) {
-    _timer?.cancel();
-    final seconds = quick ? 1 + _random.nextInt(2) : 3 + _random.nextInt(5);
-    _timer = Timer(Duration(seconds: seconds), _selectAction);
+  void _scheduleAutonomy() {
+    _autonomyTimer?.cancel();
+    _autonomyTimer = Timer(Duration(seconds: 4 + _random.nextInt(4)), () {
+      if (!mounted || _moving || _activeObject != null) return;
+      if (_placements.isNotEmpty && _random.nextBool()) {
+        final placement = _placements[_random.nextInt(_placements.length)];
+        _approachAcquired(placement);
+      } else if (_random.nextInt(4) == 0) {
+        final object =
+            _room.fixedObjects[_random.nextInt(_room.fixedObjects.length)];
+        _approachFixed(object);
+      } else {
+        _moveTo(
+          RoomPoint(
+            16 + _random.nextDouble() * 68,
+            67 + _random.nextDouble() * 22,
+          ),
+        );
+      }
+      _scheduleAutonomy();
+    });
   }
 
-  void _selectAction() {
-    if (!mounted || _isTouchReaction) return;
-    final candidates = <_AvatarAction>[
-      _AvatarAction.lookAround,
-      _AvatarAction.walk,
-      _AvatarAction.rest,
-      _AvatarAction.wave,
-      _AvatarAction.celebrate,
-      ..._itemActions(),
-    ].where((action) => !_recent.contains(action)).toList();
-    final next = candidates.isEmpty
-        ? _AvatarAction.lookAround
-        : candidates[_random.nextInt(candidates.length)];
-    _recent.add(next);
-    if (_recent.length > 2) _recent.removeAt(0);
-    _moveFor(next);
-    setState(() => _action = next);
-    _schedule();
-  }
-
-  List<_AvatarAction> _itemActions() {
-    final itemIds = _placements.map((item) => item.itemId).toSet();
-    return [
-      if (itemIds.contains('bathroom_soap_01')) _AvatarAction.washHands,
-      if (itemIds.contains('bathroom_toothbrush_01')) _AvatarAction.brushTeeth,
-      if (itemIds.contains('bathroom_towel_01')) _AvatarAction.dryHands,
-      if (itemIds.contains('playroom_toybox_01')) _AvatarAction.play,
-      if (itemIds.contains('kitchen_cup_01')) _AvatarAction.drink,
-      if (itemIds.contains('entrance_bag_01')) _AvatarAction.packBag,
-      if (itemIds.contains('bedroom_lamp_01') ||
-          itemIds.contains('bedroom_star_01'))
-        _AvatarAction.stargaze,
-      if (itemIds.contains('safety_car_01') ||
-          itemIds.contains('safety_cone_01'))
-        _AvatarAction.safetyStop,
-    ];
-  }
-
-  void _moveFor(_AvatarAction action) {
-    final itemId = switch (action) {
-      _AvatarAction.washHands => 'bathroom_soap_01',
-      _AvatarAction.brushTeeth => 'bathroom_toothbrush_01',
-      _AvatarAction.dryHands => 'bathroom_towel_01',
-      _AvatarAction.play => 'playroom_toybox_01',
-      _AvatarAction.drink => 'kitchen_cup_01',
-      _AvatarAction.packBag => 'entrance_bag_01',
-      _AvatarAction.stargaze => 'bedroom_star_01',
-      _AvatarAction.safetyStop => 'safety_cone_01',
-      _ => null,
-    };
-    final matches = itemId == null
-        ? const <SpacePlacement>[]
-        : _placements.where((item) => item.itemId == itemId).toList();
-    final target = matches.isEmpty ? null : matches.first;
-    final desired = target == null
-        ? RoomPoint(
-            action == _AvatarAction.walk
-                ? 18 + _random.nextDouble() * 64
-                : 39 + _random.nextDouble() * 22,
-            64 + _random.nextDouble() * 18,
-          )
-        : RoomPoint(target.x * 100, target.y * 100);
-    _moveTo(
-      _room.walkableArea.nearestAllowed(desired, blocked: _room.collisions),
-    );
-  }
-
-  void _moveTo(RoomPoint desired) {
-    final nearby = _room.nearby(desired);
+  void _moveTo(RoomPoint wanted, {RoomObject? interactionTarget}) {
+    final target = _room.walkableArea.clamp(wanted, _room.collisions);
+    final dx = target.x - _position.x;
+    final dy = target.y - _position.y;
+    final pose = dx.abs() > dy.abs()
+        ? (dx < 0 ? _AvatarPose.left : _AvatarPose.right)
+        : (dy < 0 ? _AvatarPose.back : _AvatarPose.front);
+    _arrivalTimer?.cancel();
+    _interactionTimer?.cancel();
     setState(() {
-      _position = desired;
-      _nearbyObject = nearby;
+      _position = target;
+      _pose = pose;
+      _moving = true;
+      _bubble = null;
+      _activeObject = null;
     });
-    if (nearby != null) _onNearbyObject(nearby);
-  }
-
-  /// Single interaction event seam: Action Cards can later ask the avatar to
-  /// approach an object and invoke this same callback without changing Room UI.
-  void _onNearbyObject(InteractiveObject object) {
-    final interactionAction = switch (object.interactionType) {
-      'wash' => _AvatarAction.washHands,
-      'play' => _AvatarAction.play,
-      'drink' => _AvatarAction.drink,
-      'pack' => _AvatarAction.packBag,
-      'rest' => _AvatarAction.rest,
-      'stop' => _AvatarAction.safetyStop,
-      _ => null,
-    };
-    if (interactionAction != null && mounted) {
-      setState(() => _action = interactionAction);
-    }
-  }
-
-  void _reactToTouch() {
-    _timer?.cancel();
-    const reactions = [
-      _AvatarAction.wave,
-      _AvatarAction.celebrate,
-      _AvatarAction.touchJump,
-    ];
-    setState(() {
-      _isTouchReaction = true;
-      _action = reactions[_random.nextInt(reactions.length)];
-    });
-    Timer(Duration(milliseconds: 1100 + _random.nextInt(700)), () {
+    _arrivalTimer = Timer(const Duration(milliseconds: 950), () {
       if (!mounted) return;
-      setState(() => _isTouchReaction = false);
-      _schedule(quick: true);
+      setState(() {
+        _moving = false;
+        _pose = interactionTarget == null
+            ? _AvatarPose.front
+            : _poseFor(interactionTarget.interaction);
+        _activeObject = interactionTarget;
+        _bubble = interactionTarget == null
+            ? null
+            : '${interactionTarget.name}${_interactionCopy(interactionTarget.interaction)}';
+      });
+      if (interactionTarget != null) {
+        _interactionTimer = Timer(const Duration(milliseconds: 2200), () {
+          if (!mounted) return;
+          setState(() {
+            _pose = _AvatarPose.front;
+            _activeObject = null;
+            _bubble = null;
+          });
+        });
+      }
+    });
+  }
+
+  _AvatarPose _poseFor(RoomInteraction interaction) => switch (interaction) {
+    RoomInteraction.dry || RoomInteraction.wash => _AvatarPose.wipe,
+    RoomInteraction.organize || RoomInteraction.pickUp => _AvatarPose.organize,
+    RoomInteraction.look ||
+    RoomInteraction.stop ||
+    RoomInteraction.askHelp => _AvatarPose.wave,
+    _ => _AvatarPose.use,
+  };
+
+  String _interactionCopy(RoomInteraction interaction) => switch (interaction) {
+    RoomInteraction.look => '을 살펴봐요',
+    RoomInteraction.wash => '에서 깨끗이 씻어요',
+    RoomInteraction.brush => '로 이를 닦아요',
+    RoomInteraction.bathe => '에서 씻어요',
+    RoomInteraction.dry => '로 닦아요',
+    RoomInteraction.dress => '에서 옷을 준비해요',
+    RoomInteraction.organize => '에 정리해요',
+    RoomInteraction.pickUp => '을 집어 들어요',
+    RoomInteraction.eat => '에서 먹어요',
+    RoomInteraction.drink => '으로 마셔요',
+    RoomInteraction.prepare => '을 챙겨요',
+    RoomInteraction.stop => ' 앞에서 멈춰 살펴요',
+    RoomInteraction.askHelp => '로 도움을 요청해요',
+    RoomInteraction.rest => '에서 잠시 쉬어요',
+  };
+
+  void _approachFixed(RoomObject object) =>
+      _moveTo(object.approachPoint, interactionTarget: object);
+
+  void _approachAcquired(SpacePlacement placement) {
+    final item = GrowthRewardRepository.items
+        .where((candidate) => candidate.id == placement.itemId)
+        .firstOrNull;
+    if (item == null || item.spaceId != _room.id) return;
+    final object = RoomObject(
+      id: placement.id,
+      name: item.name,
+      kind: RoomObjectKind.acquired,
+      itemId: item.id,
+      position: RoomPoint(placement.x * 100, placement.y * 100),
+      approachPoint: _room.walkableArea.clamp(
+        RoomPoint(placement.x * 100, placement.y * 100 + 12),
+        _room.collisions,
+      ),
+      interaction: _interactionForItem(item.id),
+    );
+    _moveTo(object.approachPoint, interactionTarget: object);
+  }
+
+  RoomInteraction _interactionForItem(String itemId) {
+    if (itemId.contains('soap') || itemId.contains('shampoo')) {
+      return RoomInteraction.wash;
+    }
+    if (itemId.contains('toothbrush')) return RoomInteraction.brush;
+    if (itemId.contains('towel') || itemId.contains('cloth')) {
+      return RoomInteraction.dry;
+    }
+    if (itemId.contains('cup') || itemId.contains('bottle')) {
+      return RoomInteraction.drink;
+    }
+    if (itemId.contains('dishes') || itemId.contains('cutlery')) {
+      return RoomInteraction.eat;
+    }
+    if (itemId.contains('cone') ||
+        itemId.contains('stop') ||
+        itemId.contains('crosswalk')) {
+      return RoomInteraction.stop;
+    }
+    if (itemId.contains('contact')) return RoomInteraction.askHelp;
+    if (itemId.contains('bag') ||
+        itemId.contains('umbrella') ||
+        itemId.contains('wipes')) {
+      return RoomInteraction.prepare;
+    }
+    if (itemId.contains('rack') || itemId.contains('hat')) {
+      return RoomInteraction.dress;
+    }
+    return RoomInteraction.organize;
+  }
+
+  void _reactToAvatar() {
+    _arrivalTimer?.cancel();
+    setState(() {
+      _moving = false;
+      _pose = _AvatarPose.wave;
+      _bubble = '안녕! 같이 둘러볼까?';
+    });
+    _interactionTimer?.cancel();
+    _interactionTimer = Timer(const Duration(milliseconds: 1700), () {
+      if (!mounted) return;
+      setState(() {
+        _pose = _AvatarPose.front;
+        _bubble = null;
+      });
     });
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _autonomyTimer?.cancel();
+    _arrivalTimer?.cancel();
+    _interactionTimer?.cancel();
     _motion.dispose();
-    _controller.dispose();
+    _pageController.dispose();
     super.dispose();
   }
-
-  String get _bubble => switch (_action) {
-    _AvatarAction.lookAround => '\uBB34\uC5C7\uC744 \uD574\uBCFC\uAE4C?',
-    _AvatarAction.walk => '\uCC9C\uCC9C\uD788 \uAC78\uC5B4\uBCFC\uB798!',
-    _AvatarAction.rest => '\uC7A0\uC2DC \uC26C\uC5B4\uC694.',
-    _AvatarAction.wave => '\uC548\uB155! \uC62C \uAC70\uC9C0?',
-    _AvatarAction.celebrate => '\uC7AC\uBBF8\uC788\uB2E4!',
-    _AvatarAction.washHands =>
-      '\uBE44\uB204\uB85C \uC190\uC744 \uC53B\uC5B4\uC694!',
-    _AvatarAction.brushTeeth => '\uCE58\uCE74\uCE58\uCE74!',
-    _AvatarAction.dryHands => '\uC190\uC744 \uB2E6\uC544\uC694.',
-    _AvatarAction.play => '\uAC19\uC774 \uB180\uC544\uC694!',
-    _AvatarAction.drink => '\uBB3C \uD55C \uBAA8\uAE08!',
-    _AvatarAction.packBag => '\uAC00\uBC29\uC744 \uCC59\uAE30\uC790!',
-    _AvatarAction.stargaze => '\uBCC4\uC774 \uBC18\uC9DD\uBC18\uC9DD!',
-    _AvatarAction.safetyStop => '\uBA48\uCDB0\uC11C \uC0B4\uD3B4\uBD10\uC694.',
-    _AvatarAction.touchJump => '\uBC18\uAC00\uC6CC\uC694!',
-  };
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: Text('${_room.label}\uC5D0\uC11C \uB180\uC544\uC694'),
+      title: Text('${_room.label}에서 놀아요'),
       actions: [
         IconButton(
           icon: const Icon(Icons.checkroom_outlined),
-          tooltip: '\uC544\uBC14\uD0C0 \uAFB8\uBBF8\uAE30',
+          tooltip: '아바타 꾸미기',
           onPressed: () => Navigator.of(context)
               .push(
                 MaterialPageRoute(
                   builder: (_) => AvatarPage(profileId: widget.profileId),
                 ),
               )
-              .then((_) => _load()),
-        ),
-        IconButton(
-          icon: const Icon(Icons.dashboard_customize_outlined),
-          tooltip: '\uACF5\uAC04 \uAFB8\uBBF8\uAE30',
-          onPressed: () => Navigator.of(context)
-              .push(
-                MaterialPageRoute(
-                  builder: (_) => SpacePage(profileId: widget.profileId),
-                ),
-              )
-              .then((_) => _load()),
+              .then((_) => _loadRoom()),
         ),
       ],
     ),
     body: PageView.builder(
-      controller: _controller,
+      controller: _pageController,
       itemCount: avatarRooms.length,
-      onPageChanged: (value) {
+      onPageChanged: (index) {
         setState(() {
-          _page = value;
-          _position = const RoomPoint(50, 72);
-          _nearbyObject = null;
-          _action = _AvatarAction.lookAround;
+          _roomIndex = index;
+          _position = const RoomPoint(50, 77);
+          _pose = _AvatarPose.front;
+          _bubble = null;
+          _activeObject = null;
         });
-        _load();
-        _schedule();
+        _loadRoom();
       },
-      itemBuilder: (context, index) => _WorldScene(
+      itemBuilder: (context, index) => _RoomScene(
         room: avatarRooms[index],
-        visible: index == _page,
-        placements: index == _page ? _placements : const [],
-        action: _action,
+        active: index == _roomIndex,
         position: _position,
-        motion: _motion,
+        pose: _pose,
+        moving: _moving,
         bubble: _bubble,
-        nearbyObject: _nearbyObject,
-        touchReaction: _isTouchReaction,
-        blueTop: _equipped['top'] == 'avatar_top_01',
-        hasHat: _equipped['hat'] != null,
-        hasBag: _equipped['accessory'] != null,
-        onTap: _reactToTouch,
-        onMoveRequested: _moveTo,
+        placements: index == _roomIndex ? _placements : const [],
+        motion: _motion,
+        equipped: _equipped,
+        onFloorTap: (point) => _moveTo(point),
+        onFixedTap: _approachFixed,
+        onItemTap: _approachAcquired,
+        onAvatarTap: _reactToAvatar,
+        onDecorate: () => Navigator.of(context)
+            .push(
+              MaterialPageRoute(
+                builder: (_) => SpacePage(
+                  profileId: widget.profileId,
+                  initialSpaceId: _room.id,
+                ),
+              ),
+            )
+            .then((_) => _loadRoom()),
       ),
     ),
     bottomNavigationBar: _AvatarNavigation(
@@ -293,48 +306,47 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
   );
 }
 
-class _WorldScene extends StatelessWidget {
-  const _WorldScene({
+class _RoomScene extends StatelessWidget {
+  const _RoomScene({
     required this.room,
-    required this.visible,
-    required this.placements,
-    required this.action,
+    required this.active,
     required this.position,
-    required this.motion,
+    required this.pose,
+    required this.moving,
     required this.bubble,
-    required this.nearbyObject,
-    required this.touchReaction,
-    required this.blueTop,
-    required this.hasHat,
-    required this.hasBag,
-    required this.onTap,
-    required this.onMoveRequested,
+    required this.placements,
+    required this.motion,
+    required this.equipped,
+    required this.onFloorTap,
+    required this.onFixedTap,
+    required this.onItemTap,
+    required this.onAvatarTap,
+    required this.onDecorate,
   });
+
   final AvatarRoom room;
-  final bool visible;
-  final List<SpacePlacement> placements;
-  final _AvatarAction action;
+  final bool active;
   final RoomPoint position;
+  final _AvatarPose pose;
+  final bool moving;
+  final String? bubble;
+  final List<SpacePlacement> placements;
   final Animation<double> motion;
-  final String bubble;
-  final InteractiveObject? nearbyObject;
-  final bool touchReaction;
-  final bool blueTop;
-  final bool hasHat;
-  final bool hasBag;
-  final VoidCallback onTap;
-  final ValueChanged<RoomPoint> onMoveRequested;
+  final Map<String, String> equipped;
+  final ValueChanged<RoomPoint> onFloorTap;
+  final ValueChanged<RoomObject> onFixedTap;
+  final ValueChanged<SpacePlacement> onItemTap;
+  final VoidCallback onAvatarTap;
+  final VoidCallback onDecorate;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) {
-      final size = Size(box.maxWidth, box.maxHeight);
-      final width = size.width;
-      final height = size.height;
-      final foot = position.toOffset(size);
-      final depth = (position.y / 100).clamp(.72, 1.08);
-      final avatarWidth = 156 * depth;
-      final avatarHeight = 235 * depth;
+    builder: (context, constraints) {
+      final size = Size(constraints.maxWidth, constraints.maxHeight);
+      final foot = position.toScreen(size);
+      final depthScale = .78 + (position.y / 100) * .25;
+      final avatarHeight = 210 * depthScale;
+      final avatarWidth = 126 * depthScale;
       return Stack(
         fit: StackFit.expand,
         clipBehavior: Clip.hardEdge,
@@ -343,237 +355,238 @@ class _WorldScene extends StatelessWidget {
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
-              onTapDown: (details) {
-                final wanted = RoomPoint(
-                  (details.localPosition.dx / width * 100)
-                      .clamp(0, 100)
-                      .toDouble(),
-                  (details.localPosition.dy / height * 100)
-                      .clamp(0, 100)
-                      .toDouble(),
-                );
-                // A tap on the room is a user movement event. It uses the
-                // same collision-aware logical coordinate conversion as AI movement.
-                onMoveRequested(
-                  room.walkableArea.nearestAllowed(
-                    wanted,
-                    blocked: room.collisions,
-                  ),
-                );
-              },
+              onTapDown: (details) => onFloorTap(
+                RoomPoint(
+                  details.localPosition.dx / size.width * 100,
+                  details.localPosition.dy / size.height * 100,
+                ),
+              ),
             ),
           ),
-          for (final placement in placements)
-            Positioned(
-              left: (placement.x * (width - 56))
-                  .clamp(4, width - 60)
-                  .toDouble(),
-              top: (placement.y * (height - 56))
-                  .clamp(height * .18, height - 70)
-                  .toDouble(),
-              child: _PlacedVisual(placement: placement),
+          for (final object in room.fixedObjects)
+            _FixedObjectHotspot(
+              object: object,
+              size: size,
+              onTap: () => onFixedTap(object),
             ),
-          if (visible)
+          for (final placement in placements)
+            _AcquiredObject(
+              placement: placement,
+              size: size,
+              onTap: () => onItemTap(placement),
+            ),
+          if (active)
             AnimatedPositioned(
               duration: const Duration(milliseconds: 900),
               curve: Curves.easeInOutCubic,
-              left: (foot.dx - 48 * depth)
-                  .clamp(6, width - 96 * depth)
-                  .toDouble(),
-              // The shadow and avatar use the same foot anchor.
-              top: (foot.dy - 8 * depth)
-                  .clamp(height * .36, height - 26)
-                  .toDouble(),
+              left: foot.dx - 34 * depthScale,
+              top: foot.dy - 7,
               child: Container(
-                width: 96 * depth,
-                height: 15 * depth,
+                width: 68 * depthScale,
+                height: 12 * depthScale,
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: .22),
+                  color: Colors.black.withValues(alpha: .20),
                   borderRadius: BorderRadius.circular(50),
                 ),
               ),
             ),
-          if (visible && nearbyObject != null)
-            Positioned(
-              left: 12,
-              bottom: 12,
-              child: _InteractionHint(object: nearbyObject!),
-            ),
-          if (visible)
+          if (active)
             AnimatedPositioned(
               duration: const Duration(milliseconds: 900),
               curve: Curves.easeInOutCubic,
-              left: (foot.dx - avatarWidth / 2)
-                  .clamp(6, width - avatarWidth - 6)
-                  .toDouble(),
-              top: (foot.dy - avatarHeight)
-                  .clamp(height * .13, height - avatarHeight - 20)
-                  .toDouble(),
+              left: (foot.dx - avatarWidth / 2).clamp(
+                2,
+                size.width - avatarWidth - 2,
+              ),
+              top: (foot.dy - avatarHeight).clamp(
+                4,
+                size.height - avatarHeight - 12,
+              ),
               child: SizedBox(
                 width: avatarWidth,
                 height: avatarHeight,
-                child: _LivingAvatar(
-                  action: action,
-                  motion: motion,
+                child: _AvatarSprite(
+                  pose: pose,
+                  moving: moving,
                   bubble: bubble,
-                  touchReaction: touchReaction,
-                  blueTop: blueTop,
-                  hasHat: hasHat,
-                  hasBag: hasBag,
-                  onTap: onTap,
+                  motion: motion,
+                  equipped: equipped,
+                  onTap: onAvatarTap,
                 ),
               ),
             ),
+          Positioned(
+            top: 10,
+            left: 12,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .90),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                child: Text(
+                  '${room.label}  ${_categoryLabel(room.id)}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 14,
+            child: Center(
+              child: FilledButton.icon(
+                onPressed: onDecorate,
+                icon: const Icon(Icons.home_outlined),
+                label: const Text('공간 꾸미기'),
+              ),
+            ),
+          ),
         ],
       );
     },
   );
+
+  String _categoryLabel(String roomId) => switch (roomId) {
+    'bathroom' => '위생 · 화장실',
+    'bedroom' => '옷 입기',
+    'kitchen' => '식사',
+    'playroom' => '물건과 집안일',
+    'entrance' => '외출 준비',
+    'safety' => '안전과 도움 요청',
+    _ => '',
+  };
 }
 
-class _LivingAvatar extends StatelessWidget {
-  const _LivingAvatar({
-    required this.action,
-    required this.motion,
-    required this.bubble,
-    required this.touchReaction,
-    required this.blueTop,
-    required this.hasHat,
-    required this.hasBag,
+class _FixedObjectHotspot extends StatelessWidget {
+  const _FixedObjectHotspot({
+    required this.object,
+    required this.size,
     required this.onTap,
   });
-  final _AvatarAction action;
+  final RoomObject object;
+  final Size size;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final point = object.position.toScreen(size);
+    final rect = object.collision;
+    final width = (rect?.width ?? 16) * size.width / 100;
+    final height = (rect?.height ?? 16) * size.height / 100;
+    return Positioned(
+      left: point.dx - width / 2,
+      top: point.dy - height / 2,
+      width: width,
+      height: height,
+      child: Semantics(
+        button: true,
+        label: '${object.name}과 상호작용',
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          splashColor: const Color(0x443e9657),
+        ),
+      ),
+    );
+  }
+}
+
+class _AcquiredObject extends StatelessWidget {
+  const _AcquiredObject({
+    required this.placement,
+    required this.size,
+    required this.onTap,
+  });
+  final SpacePlacement placement;
+  final Size size;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Positioned(
+    left: placement.x * size.width - 31,
+    top: placement.y * size.height - 31,
+    child: Semantics(
+      button: true,
+      label: '획득 아이템과 상호작용',
+      child: GestureDetector(
+        onTap: onTap,
+        child: AvatarObjectSprite(itemId: placement.itemId, size: 62),
+      ),
+    ),
+  );
+}
+
+class _AvatarSprite extends StatelessWidget {
+  const _AvatarSprite({
+    required this.pose,
+    required this.moving,
+    required this.bubble,
+    required this.motion,
+    required this.equipped,
+    required this.onTap,
+  });
+  final _AvatarPose pose;
+  final bool moving;
+  final String? bubble;
   final Animation<double> motion;
-  final String bubble;
-  final bool touchReaction;
-  final bool blueTop;
-  final bool hasHat;
-  final bool hasBag;
+  final Map<String, String> equipped;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: motion,
     builder: (context, _) {
-      final beat = sin(motion.value * pi);
-      final jump = action == _AvatarAction.touchJump ? -22 * beat : 0.0;
-      final rotation = action == _AvatarAction.wave
-          ? .08 * beat
-          : action == _AvatarAction.lookAround
-          ? .035 * beat
-          : 0.0;
-      final scale = touchReaction
-          ? 1.10 + .05 * beat
-          : action == _AvatarAction.celebrate
-          ? 1.03 + .05 * beat
-          : 1.0;
+      final bounce = moving ? sin(motion.value * pi) * 3 : 0.0;
       return Transform.translate(
-        offset: Offset(0, jump),
-        child: Transform.rotate(
-          angle: rotation,
-          child: Transform.scale(
-            scale: scale,
-            child: GestureDetector(
-              onTap: onTap,
-              child: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.topCenter,
-                children: [
-                  Positioned(top: -48, child: _Bubble(text: bubble)),
-                  Image.asset(
-                    blueTop
-                        ? 'assets/avatars/avatar_blue_top.png'
-                        : 'assets/avatars/starter_child.png',
-                    height: 235,
+        offset: Offset(0, -bounce),
+        child: GestureDetector(
+          onTap: onTap,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.bottomCenter,
+            children: [
+              Positioned.fill(child: _MotionCell(pose: pose)),
+              if (equipped['hat'] != null)
+                const Positioned(
+                  top: 5,
+                  child: Text('🧢', style: TextStyle(fontSize: 28)),
+                ),
+              if (equipped['accessory'] != null)
+                const Positioned(
+                  right: 3,
+                  bottom: 35,
+                  child: Text('🎒', style: TextStyle(fontSize: 25)),
+                ),
+              if (bubble != null)
+                Positioned(
+                  top: -38,
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 170),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: .94),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(
+                      bubble!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                  if (hasHat)
-                    const Positioned(
-                      top: 0,
-                      child: Text(
-                        '\uD83E\uDDE2',
-                        style: TextStyle(fontSize: 35),
-                      ),
-                    ),
-                  if (hasBag || action == _AvatarAction.packBag)
-                    const Positioned(
-                      right: 5,
-                      bottom: 35,
-                      child: Text(
-                        '\uD83C\uDF92',
-                        style: TextStyle(fontSize: 35),
-                      ),
-                    ),
-                  if (action == _AvatarAction.washHands)
-                    const Positioned(
-                      left: 4,
-                      top: 94,
-                      child: Text(
-                        '\uD83E\uDDFC',
-                        style: TextStyle(fontSize: 30),
-                      ),
-                    ),
-                  if (action == _AvatarAction.brushTeeth)
-                    const Positioned(
-                      right: 12,
-                      top: 105,
-                      child: Text(
-                        '\uD83E\uDEA5',
-                        style: TextStyle(fontSize: 26),
-                      ),
-                    ),
-                  if (action == _AvatarAction.dryHands)
-                    const Positioned(
-                      left: 2,
-                      top: 110,
-                      child: Text(
-                        '\uD83E\uDDFB',
-                        style: TextStyle(fontSize: 26),
-                      ),
-                    ),
-                  if (action == _AvatarAction.play)
-                    const Positioned(
-                      right: 2,
-                      top: 115,
-                      child: Text(
-                        '\uD83E\uDDF8',
-                        style: TextStyle(fontSize: 27),
-                      ),
-                    ),
-                  if (action == _AvatarAction.drink)
-                    const Positioned(
-                      right: 4,
-                      top: 116,
-                      child: Text(
-                        '\uD83E\uDD64',
-                        style: TextStyle(fontSize: 27),
-                      ),
-                    ),
-                  if (action == _AvatarAction.stargaze)
-                    const Positioned(
-                      right: -2,
-                      top: 35,
-                      child: Text('\u2B50', style: TextStyle(fontSize: 27)),
-                    ),
-                  if (action == _AvatarAction.safetyStop)
-                    const Positioned(
-                      left: -2,
-                      top: 115,
-                      child: Text(
-                        '\uD83D\uDED1',
-                        style: TextStyle(fontSize: 27),
-                      ),
-                    ),
-                  if (action == _AvatarAction.wave)
-                    const Positioned(
-                      right: 0,
-                      top: 70,
-                      child: Text(
-                        '\uD83D\uDC4B',
-                        style: TextStyle(fontSize: 30),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+                ),
+            ],
           ),
         ),
       );
@@ -581,94 +594,40 @@ class _LivingAvatar extends StatelessWidget {
   );
 }
 
-class _PlacedVisual extends StatelessWidget {
-  const _PlacedVisual({required this.placement});
-  final SpacePlacement placement;
-  @override
-  Widget build(BuildContext context) {
-    final matches = GrowthRewardRepository.items
-        .where((item) => item.id == placement.itemId)
-        .toList();
-    final item = matches.isEmpty ? null : matches.first;
-    return SizedBox(
-      width: 58,
-      height: 58,
-      child: _WorldItemSprite(itemId: item?.id),
-    );
-  }
-}
+class _MotionCell extends StatelessWidget {
+  const _MotionCell({required this.pose});
+  final _AvatarPose pose;
 
-class _WorldItemSprite extends StatelessWidget {
-  const _WorldItemSprite({required this.itemId});
-  final String? itemId;
   @override
   Widget build(BuildContext context) {
-    final cell = switch (itemId) {
-      'bathroom_soap_01' => (-1.0, -1.0),
-      'bathroom_toothbrush_01' => (0.0, -1.0),
-      'bathroom_towel_01' => (1.0, -1.0),
-      'playroom_toybox_01' => (-1.0, 1.0),
-      'kitchen_cup_01' => (0.0, 1.0),
-      'entrance_bag_01' => (1.0, 1.0),
-      _ => null,
+    final (column, row) = switch (pose) {
+      _AvatarPose.front => (0, 0),
+      _AvatarPose.back => (1, 0),
+      _AvatarPose.left => (2, 0),
+      _AvatarPose.right => (3, 0),
+      _AvatarPose.use => (0, 1),
+      _AvatarPose.wipe => (1, 1),
+      _AvatarPose.organize => (2, 1),
+      _AvatarPose.wave => (3, 1),
     };
-    if (cell == null) {
-      return const Center(
-        child: Text('\u2728', style: TextStyle(fontSize: 31)),
-      );
-    }
-    return ClipRect(
-      child: Align(
-        alignment: Alignment(cell.$1, cell.$2),
-        widthFactor: 1 / 3,
-        heightFactor: 1 / 2,
-        child: Image.asset(
-          'assets/space_items/room_items.png',
-          width: 174,
-          height: 116,
-          fit: BoxFit.fill,
+    return LayoutBuilder(
+      builder: (context, box) => ClipRect(
+        child: OverflowBox(
+          alignment: Alignment(-1 + column * (2 / 3), -1 + row * 2),
+          minWidth: box.maxWidth * 4,
+          maxWidth: box.maxWidth * 4,
+          minHeight: box.maxHeight * 2,
+          maxHeight: box.maxHeight * 2,
+          child: Image.asset(
+            'assets/avatars/avatar_motion_atlas.png',
+            width: box.maxWidth * 4,
+            height: box.maxHeight * 2,
+            fit: BoxFit.fill,
+          ),
         ),
       ),
     );
   }
-}
-
-class _Bubble extends StatelessWidget {
-  const _Bubble({required this.text});
-  final String text;
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: .92),
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: Text(
-      text,
-      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-    ),
-  );
-}
-
-class _InteractionHint extends StatelessWidget {
-  const _InteractionHint({required this.object});
-  final InteractiveObject object;
-
-  @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: .9),
-      borderRadius: BorderRadius.circular(14),
-      boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 6)],
-    ),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      child: Text(
-        '${object.type} 가까이 왔어요 · ${object.interactionType}',
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-      ),
-    ),
-  );
 }
 
 class _AvatarNavigation extends StatelessWidget {
@@ -680,6 +639,7 @@ class _AvatarNavigation extends StatelessWidget {
   final VoidCallback onActions;
   final VoidCallback onHome;
   final VoidCallback onRecords;
+
   @override
   Widget build(BuildContext context) => SafeArea(
     top: false,
@@ -694,20 +654,16 @@ class _AvatarNavigation extends StatelessWidget {
         children: [
           _Nav(
             icon: Icons.auto_awesome_outlined,
-            label: '\uD589\uB3D9',
+            label: '행동',
             onTap: onActions,
           ),
-          _Nav(icon: Icons.home_rounded, label: '\uD648', onTap: onHome),
+          _Nav(icon: Icons.home_rounded, label: '홈', onTap: onHome),
           const _Nav(
             icon: Icons.face_retouching_natural,
-            label: '\uC544\uBC14\uD0C0',
+            label: '아바타',
             selected: true,
           ),
-          _Nav(
-            icon: Icons.menu_book_outlined,
-            label: '\uAE30\uB85D',
-            onTap: onRecords,
-          ),
+          _Nav(icon: Icons.menu_book_outlined, label: '기록', onTap: onRecords),
         ],
       ),
     ),
@@ -725,6 +681,7 @@ class _Nav extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,

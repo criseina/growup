@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'avatar_object_sprite.dart';
 import 'avatar_room.dart';
 import 'growth_reward_repository.dart';
 
@@ -171,8 +172,9 @@ class _SlotRow extends StatelessWidget {
 }
 
 class SpacePage extends StatefulWidget {
-  const SpacePage({super.key, required this.profileId});
+  const SpacePage({super.key, required this.profileId, this.initialSpaceId});
   final String profileId;
+  final String? initialSpaceId;
   @override
   State<SpacePage> createState() => _SpacePageState();
 }
@@ -183,11 +185,12 @@ class _SpacePageState extends State<SpacePage> {
   List<UnlockableItem> _items = [];
   List<SpacePlacement> _placements = [];
   SpacePlacement? _selectedPlacement;
-  String _spaceId = 'bathroom';
+  late String _spaceId;
 
   @override
   void initState() {
     super.initState();
+    _spaceId = widget.initialSpaceId ?? 'bathroom';
     _load();
   }
 
@@ -254,14 +257,17 @@ class _SpacePageState extends State<SpacePage> {
   // repository keeps the previous 0–1 persisted values for compatibility,
   // while room definitions themselves use the common 0–100 logical system.
   ({double x, double y}) _slotFor(String itemId, ({double x, double y}) point) {
-    final room = avatarRooms.firstWhere((room) => room.id == _spaceId);
-    final slot = room.slotFor(itemId);
+    final room = roomById(_spaceId);
+    final slot = room.nearestAcceptingSlot(
+      itemId,
+      RoomPoint(point.x * 100, point.y * 100),
+    );
     if (slot != null) {
       return (x: slot.position.x / 100, y: slot.position.y / 100);
     }
-    final allowed = room.walkableArea.nearestAllowed(
+    final allowed = room.walkableArea.clamp(
       RoomPoint(point.x * 100, point.y * 100),
-      blocked: room.collisions,
+      room.collisions,
     );
     return (x: allowed.x / 100, y: allowed.y / 100);
   }
@@ -277,7 +283,7 @@ class _SpacePageState extends State<SpacePage> {
 
   @override
   Widget build(BuildContext context) {
-    final space = avatarRooms.firstWhere((item) => item.id == _spaceId);
+    final space = roomById(_spaceId);
     final inventory = _items
         .where(
           (item) =>
@@ -335,6 +341,38 @@ class _SpacePageState extends State<SpacePage> {
                         fit: StackFit.expand,
                         children: [
                           Image.asset(space.backgroundAsset, fit: BoxFit.cover),
+                          if (candidates.isNotEmpty)
+                            for (final slot in space.slots)
+                              Positioned(
+                                left:
+                                    slot.position.x /
+                                        100 *
+                                        constraints.maxWidth -
+                                    26,
+                                top:
+                                    slot.position.y /
+                                        100 *
+                                        constraints.maxHeight -
+                                    26,
+                                child: IgnorePointer(
+                                  child: Container(
+                                    width: 52,
+                                    height: 52,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0x553aa75b),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: const Icon(
+                                      Icons.add,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
                           for (final placement in _placements)
                             Positioned(
                               left: (placement.x * (constraints.maxWidth - 56))
@@ -357,10 +395,21 @@ class _SpacePageState extends State<SpacePage> {
                                   onTap: () => setState(
                                     () => _selectedPlacement = placement,
                                   ),
-                                  child: _ItemToken(
-                                    item: _itemFor(placement.itemId),
-                                    highlighted:
-                                        _selectedPlacement?.id == placement.id,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      border:
+                                          _selectedPlacement?.id == placement.id
+                                          ? Border.all(
+                                              color: const Color(0xff2f8b4b),
+                                              width: 2,
+                                            )
+                                          : null,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: AvatarObjectSprite(
+                                      itemId: placement.itemId,
+                                      size: 58,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -415,9 +464,9 @@ class _SpacePageState extends State<SpacePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '\uBCF4\uAD00\uD568  \uAE38\uAC8C \uB20C\uB7EC \uBC30\uACBD\uC5D0 \uB04C\uC5B4\uB193\uC544\uC694.',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  Text(
+                    '${space.label} 보관함 · 길게 눌러 배치하거나 이동해요.',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
                   Expanded(
@@ -495,7 +544,7 @@ class _ItemToken extends StatelessWidget {
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _SpaceSprite(itemId: item?.id),
+        AvatarObjectSprite(itemId: item?.id ?? '', size: 38),
         Text(
           item?.name ?? '',
           overflow: TextOverflow.ellipsis,
@@ -504,47 +553,6 @@ class _ItemToken extends StatelessWidget {
       ],
     ),
   );
-}
-
-class _SpaceSprite extends StatelessWidget {
-  const _SpaceSprite({required this.itemId});
-  final String? itemId;
-  static const size = 44.0;
-  @override
-  Widget build(BuildContext context) {
-    final cell = switch (itemId) {
-      'bathroom_soap_01' => (-1.0, -1.0),
-      'bathroom_toothbrush_01' => (0.0, -1.0),
-      'bathroom_towel_01' => (1.0, -1.0),
-      'playroom_toybox_01' => (-1.0, 1.0),
-      'kitchen_cup_01' => (0.0, 1.0),
-      'entrance_bag_01' => (1.0, 1.0),
-      _ => null,
-    };
-    if (cell == null) {
-      return Text(
-        itemId == null ? '\uD83D\uDCE6' : '\u2728',
-        style: TextStyle(fontSize: size * .62),
-      );
-    }
-    return SizedBox(
-      width: size,
-      height: size,
-      child: ClipRect(
-        child: Align(
-          alignment: Alignment(cell.$1, cell.$2),
-          widthFactor: 1 / 3,
-          heightFactor: 1 / 2,
-          child: Image.asset(
-            'assets/space_items/room_items.png',
-            width: size * 3,
-            height: size * 2,
-            fit: BoxFit.fill,
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 Future<void> showGrowthCelebration(
