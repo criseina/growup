@@ -469,60 +469,78 @@ class _TodayRecommendation extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Card(
-    clipBehavior: Clip.antiAlias,
-    color: const Color(0xffeff8e9),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '오늘의 추천 행동',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: const Color(0xff28753c),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 144,
-              width: double.infinity,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: ActionIllustration(
-                  card: card,
-                  large: true,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              card.childTitle,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 2),
-            Text(reason, textAlign: TextAlign.center, maxLines: 2),
-            const SizedBox(height: 4),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      // Keep enough vertical room for the changing title and two-line guidance.
+      // The illustration grows into otherwise unused card space, but is capped so
+      // it can never push the copy outside the recommendation card.
+      final illustrationHeight = (constraints.maxHeight - 158)
+          .clamp(180.0, 310.0)
+          .toDouble();
+
+      return Card(
+        clipBehavior: Clip.antiAlias,
+        color: const Color(0xffeff8e9),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.touch_app_outlined, size: 16),
-                SizedBox(width: 4),
-                Text('눌러서 아이 모드로 선택하기', style: TextStyle(fontSize: 12)),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '오늘의 추천 행동',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: const Color(0xff28753c),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  height: illustrationHeight,
+                  width: double.infinity,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: ActionIllustration(
+                      card: card,
+                      large: true,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  card.childTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  reason,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.touch_app_outlined, size: 16),
+                    SizedBox(width: 4),
+                    Text('눌러서 아이 모드로 선택하기', style: TextStyle(fontSize: 12)),
+                  ],
+                ),
               ],
             ),
-          ],
+          ),
         ),
-      ),
-    ),
+      );
+    },
   );
 }
 
