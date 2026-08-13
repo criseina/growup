@@ -1,34 +1,46 @@
-# GrowUp Prototype Beta Test Guide
+# GrowUp 휴대폰 시험 안내
 
-## Goal
+## 시험 목적
 
-Confirm that a parent can create a profile, choose an action, save an observation, and find that observation again without assistance.
+부모가 도움 없이 아이 프로필을 만들고, 행동을 선택하고, 메모를 저장하고, 성장 기록과 아바타 보상까지 다시 찾을 수 있는지 확인합니다.
 
-## Install
+## 설치
 
-1. Copy `build/app/outputs/flutter-apk/app-release.apk` to an Android phone.
-2. Open the file and allow installation from the file manager if Android asks.
-3. Open GrowUp. The app uses only local device storage in this prototype.
+1. PC에서 Android 설치 파일을 만듭니다.
+2. 휴대폰으로 `app-release.apk`를 내려받습니다.
+3. Android가 물어보면 해당 파일 앱의 설치 권한을 한 번 허용합니다.
+4. GrowUp을 엽니다.
 
-## Test flow
+QR로 받을 때는 휴대폰과 PC가 같은 Wi-Fi에 있어야 합니다. PC의 Wi-Fi 주소가 바뀌면 QR도 새로 만들어야 합니다.
 
-1. Complete the first-run introduction and enter a child nickname.
-2. Open today's recommendation or `오늘 해볼 행동`.
-3. Choose `개인 위생` and open `손 씻기`.
-4. Select one of the three child-mode answers.
-5. Open parent mode and enter a memo.
-6. Open `내 성장 기록`; verify the new record, summary, and 7-day filter.
-7. Edit the record, add an observation memo, then verify that the change remains after restarting the app.
-8. Add a second child profile; verify that its records and notes are separate.
+## 기본 사용 시험
 
-## Feedback to collect
+1. 첫 안내를 마치고 아이의 별명을 입력합니다.
+2. 홈의 추천 행동 또는 하단의 `행동`을 엽니다.
+3. `개인 위생`에서 `손을 씻어요`를 엽니다.
+4. 아이 화면에서 `혼자`, `도와주면 할 수 있어요`, `아직` 중 하나를 선택합니다.
+5. 화면을 왼쪽으로 밀어 부모 화면을 열고 메모를 남깁니다.
+6. 하단의 `기록`에서 방금 선택한 내용과 메모가 보이는지 확인합니다.
+7. 앱을 완전히 닫고 다시 열어 기록이 남아 있는지 확인합니다.
 
-- Which screen was unclear or difficult to find?
-- Did the wording feel supportive rather than evaluative?
-- Were the card order and today's recommendation appropriate?
-- Was any text too small or any button hard to tap?
-- Did anything fail to save after closing and reopening the app?
+## 아바타 공간 시험
 
-## Safety note
+1. 하단의 `아바타`를 엽니다.
+2. 여섯 공간을 좌우로 이동해 봅니다.
+3. 방에 원래 있는 가구를 터치해 캐릭터가 다가가는지 확인합니다.
+4. 획득한 물건을 해당 공간의 정해진 자리에 놓습니다.
+5. 놓은 물건을 터치해 캐릭터가 관련 행동을 하는지 확인합니다.
+6. 앱을 다시 열어 물건 위치가 남아 있는지 확인합니다.
 
-This app records everyday observations; it does not provide medical, developmental, or safety advice. Do not use it in place of professional support.
+## 기록할 의견
+
+- 찾기 어려운 화면이나 버튼이 있었나요?
+- 문구가 아이를 평가하는 느낌을 주지는 않았나요?
+- 글자가 작거나 그림이 잘린 곳이 있었나요?
+- 캐릭터의 발이 바닥에서 떠 보이거나 이동이 어색했나요?
+- 저장한 내용이나 배치한 물건이 사라졌나요?
+- 같은 행동에서 보상이 두 번 생기지는 않았나요?
+
+## 주의
+
+GrowUp은 일상 행동을 관찰하고 기록하는 앱입니다. 의료·발달·안전 분야의 전문 판단을 대신하지 않습니다.
