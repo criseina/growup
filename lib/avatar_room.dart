@@ -6,6 +6,8 @@ enum RoomObjectKind { fixed, acquired }
 
 enum RoomVisualLayer { back, depthSorted, front }
 
+enum RoomFacing { front, back, left, right }
+
 enum RoomInteraction {
   look,
   wash,
@@ -113,6 +115,9 @@ class RoomObject {
     this.hitWidth = 12,
     this.hitHeight = 12,
     this.visualLayer = RoomVisualLayer.depthSorted,
+    this.interactionPoint,
+    this.interactionFacing = RoomFacing.back,
+    this.interactionDuration = const Duration(milliseconds: 2200),
   });
 
   final String id;
@@ -126,6 +131,9 @@ class RoomObject {
   final RoomSize visualSize;
   final double? depth;
   final RoomVisualLayer visualLayer;
+  final RoomPoint? interactionPoint;
+  final RoomFacing interactionFacing;
+  final Duration interactionDuration;
   final Set<String> relatedActionIds;
   final String? itemId;
   final RoomRect? collision;
@@ -147,6 +155,7 @@ class RoomObject {
     hitWidth,
     hitHeight,
   );
+  RoomPoint get resolvedInteractionPoint => interactionPoint ?? approachPoint;
 }
 
 class DecorationSlot {
@@ -229,6 +238,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(73, 66),
         interaction: RoomInteraction.look,
         interactionAnimation: 'look_in_mirror',
+        interactionFacing: RoomFacing.right,
         visualSize: RoomSize(18, 24),
         visualLayer: RoomVisualLayer.back,
       ),
@@ -240,6 +250,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(73, 67),
         interaction: RoomInteraction.wash,
         interactionAnimation: 'wash_hands',
+        interactionFacing: RoomFacing.right,
         visualSize: RoomSize(30, 28),
         depth: 62,
         relatedActionIds: {'H-01', 'H-04'},
@@ -253,6 +264,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(29, 72),
         interaction: RoomInteraction.bathe,
         interactionAnimation: 'take_bath',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(42, 27),
         depth: 64,
         relatedActionIds: {'H-02', 'H-05', 'H-06'},
@@ -266,6 +278,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(29, 72),
         interaction: RoomInteraction.bathe,
         interactionAnimation: 'take_shower',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(15, 30),
         visualLayer: RoomVisualLayer.back,
         relatedActionIds: {'H-05', 'H-06'},
@@ -317,6 +330,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(67, 66),
         interaction: RoomInteraction.rest,
         interactionAnimation: 'rest_on_bed',
+        interactionFacing: RoomFacing.right,
         visualSize: RoomSize(43, 29),
         depth: 61,
         collision: RoomRect(66, 32, 34, 27),
@@ -329,6 +343,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(39, 66),
         interaction: RoomInteraction.look,
         interactionAnimation: 'look_in_mirror',
+        interactionFacing: RoomFacing.back,
         visualSize: RoomSize(18, 34),
         visualLayer: RoomVisualLayer.back,
       ),
@@ -340,6 +355,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(28, 66),
         interaction: RoomInteraction.dress,
         interactionAnimation: 'choose_clothes',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(28, 42),
         depth: 57,
         relatedActionIds: {'C-01', 'C-02', 'C-09', 'C-13'},
@@ -412,6 +428,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(62, 72),
         interaction: RoomInteraction.eat,
         interactionAnimation: 'eat',
+        interactionFacing: RoomFacing.right,
         visualSize: RoomSize(34, 25),
         depth: 62,
         relatedActionIds: {'M-01', 'M-02', 'M-03'},
@@ -425,6 +442,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(29, 70),
         interaction: RoomInteraction.organize,
         interactionAnimation: 'organize_dishes',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(32, 26),
         depth: 61,
         relatedActionIds: {'M-04'},
@@ -438,6 +456,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(34, 67),
         interaction: RoomInteraction.wash,
         interactionAnimation: 'clean',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(33, 27),
         depth: 60,
         relatedActionIds: {'M-05', 'B-04'},
@@ -451,6 +470,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(43, 66),
         interaction: RoomInteraction.prepare,
         interactionAnimation: 'prepare_food',
+        interactionFacing: RoomFacing.back,
         visualSize: RoomSize(22, 40),
         depth: 58,
         collision: RoomRect(29, 20, 20, 35),
@@ -509,6 +529,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(28, 68),
         interaction: RoomInteraction.organize,
         interactionAnimation: 'organize',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(32, 28),
         depth: 64,
         relatedActionIds: {'B-01', 'B-02'},
@@ -522,6 +543,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(75, 67),
         interaction: RoomInteraction.organize,
         interactionAnimation: 'organize_books',
+        interactionFacing: RoomFacing.right,
         visualSize: RoomSize(25, 40),
         depth: 62,
         relatedActionIds: {'B-06'},
@@ -581,6 +603,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(31, 69),
         interaction: RoomInteraction.prepare,
         interactionAnimation: 'organize_shoes',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(31, 34),
         depth: 63,
         relatedActionIds: {'O-01', 'O-02', 'O-03'},
@@ -594,6 +617,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(75, 69),
         interaction: RoomInteraction.prepare,
         interactionAnimation: 'prepare_to_go_out',
+        interactionFacing: RoomFacing.right,
         visualSize: RoomSize(19, 49),
         visualLayer: RoomVisualLayer.back,
         relatedActionIds: {'O-07', 'O-08'},
@@ -607,6 +631,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(30, 67),
         interaction: RoomInteraction.dress,
         interactionAnimation: 'wear_outerwear',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(27, 25),
         visualLayer: RoomVisualLayer.back,
         relatedActionIds: {'O-07', 'O-12'},
@@ -619,6 +644,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(67, 65),
         interaction: RoomInteraction.stop,
         interactionAnimation: 'check_traffic_light',
+        interactionFacing: RoomFacing.back,
         visualSize: RoomSize(17, 34),
         depth: 58,
         relatedActionIds: {'S-01', 'S-02'},
@@ -631,6 +657,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(68, 65),
         interaction: RoomInteraction.stop,
         interactionAnimation: 'stop_and_look',
+        interactionFacing: RoomFacing.front,
         visualSize: RoomSize(36, 18),
         depth: 52,
         relatedActionIds: {'S-01', 'S-02'},
@@ -717,6 +744,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(34, 66),
         interaction: RoomInteraction.useToilet,
         interactionAnimation: 'use_toilet',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(29, 32),
         depth: 63,
         relatedActionIds: {'T-01', 'T-02', 'T-03', 'T-04'},
@@ -730,6 +758,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(68, 66),
         interaction: RoomInteraction.wash,
         interactionAnimation: 'wash_hands',
+        interactionFacing: RoomFacing.right,
         visualSize: RoomSize(27, 29),
         depth: 62,
         relatedActionIds: {'T-06'},
@@ -743,6 +772,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(35, 66),
         interaction: RoomInteraction.flush,
         interactionAnimation: 'flush_toilet',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(12, 10),
         visualLayer: RoomVisualLayer.back,
         relatedActionIds: {'T-06'},
@@ -757,6 +787,7 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(45, 66),
         interaction: RoomInteraction.pickUp,
         interactionAnimation: 'wipe',
+        interactionFacing: RoomFacing.left,
         visualSize: RoomSize(13, 13),
         visualLayer: RoomVisualLayer.back,
         relatedActionIds: {'T-05'},

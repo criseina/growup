@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'avatar_character_system.dart';
 import 'avatar_object_sprite.dart';
 import 'avatar_room.dart';
 import 'growth_reward_pages.dart';
@@ -27,8 +28,8 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
   final _random = Random();
   late final AnimationController _motion = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 700),
-  )..repeat(reverse: true);
+    duration: AvatarMovementSystem.walkCycleDuration,
+  )..repeat();
 
   Timer? _autonomyTimer;
   Timer? _arrivalTimer;
@@ -36,6 +37,8 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
   int _roomIndex = 0;
   RoomPoint _position = avatarRooms.first.initialAvatarPosition;
   _AvatarPose _pose = _AvatarPose.front;
+  Duration _movementDuration = const Duration(milliseconds: 1);
+  int _movementSerial = 0;
   bool _moving = false;
   String? _bubble;
   RoomObject? _activeObject;
@@ -92,35 +95,78 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
   }
 
   void _moveTo(RoomPoint wanted, {RoomObject? interactionTarget}) {
-    final target = _room.walkableArea.clamp(wanted, _room.collisions);
-    final dx = target.x - _position.x;
-    final dy = target.y - _position.y;
-    final pose = dx.abs() > dy.abs()
-        ? (dx < 0 ? _AvatarPose.left : _AvatarPose.right)
-        : (dy < 0 ? _AvatarPose.back : _AvatarPose.front);
     _arrivalTimer?.cancel();
     _interactionTimer?.cancel();
+    final serial = ++_movementSerial;
+    final destination = interactionTarget?.resolvedInteractionPoint ?? wanted;
+    final path = AvatarMovementSystem.path(
+      from: _position,
+      wanted: destination,
+      walkableArea: _room.walkableArea,
+      obstacles: _room.collisions,
+    );
+    if (path.isEmpty) {
+      setState(() {
+        _moving = false;
+        _pose = _AvatarPose.front;
+        _activeObject = null;
+        _bubble = interactionTarget == null
+            ? null
+            : '${interactionTarget.name} 앞에는 지금 갈 수 없어요';
+      });
+      return;
+    }
+    final durations = AvatarMovementSystem.durations(_position, path);
+    _moveAlong(
+      path,
+      durations: durations,
+      interactionTarget: interactionTarget,
+      serial: serial,
+    );
+  }
+
+  void _moveAlong(
+    List<RoomPoint> path, {
+    required List<Duration> durations,
+    required RoomObject? interactionTarget,
+    required int serial,
+  }) {
+    if (path.isEmpty || serial != _movementSerial) return;
+    final target = path.first;
+    final duration = durations.first;
+    final facing = AvatarMovementSystem.facing(_position, target);
     setState(() {
       _position = target;
-      _pose = pose;
+      _pose = _poseForFacing(facing);
+      _movementDuration = duration;
       _moving = true;
       _bubble = null;
       _activeObject = null;
     });
-    _arrivalTimer = Timer(const Duration(milliseconds: 1200), () {
-      if (!mounted) return;
+    _arrivalTimer = Timer(duration, () {
+      if (!mounted || serial != _movementSerial) return;
+      final remaining = path.skip(1).toList();
+      if (remaining.isNotEmpty) {
+        _moveAlong(
+          remaining,
+          durations: durations.skip(1).toList(),
+          interactionTarget: interactionTarget,
+          serial: serial,
+        );
+        return;
+      }
       setState(() {
         _moving = false;
         _pose = interactionTarget == null
             ? _AvatarPose.front
-            : _poseFor(interactionTarget.interaction);
+            : _poseForRoomFacing(interactionTarget.interactionFacing);
         _activeObject = interactionTarget;
         _bubble = interactionTarget == null
             ? null
             : '${interactionTarget.name}${_interactionCopy(interactionTarget.interaction)}';
       });
       if (interactionTarget != null) {
-        _interactionTimer = Timer(const Duration(milliseconds: 2200), () {
+        _interactionTimer = Timer(interactionTarget.interactionDuration, () {
           if (!mounted) return;
           setState(() {
             _pose = _AvatarPose.front;
@@ -132,14 +178,18 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
     });
   }
 
-  _AvatarPose _poseFor(RoomInteraction interaction) => switch (interaction) {
-    RoomInteraction.dry || RoomInteraction.wash => _AvatarPose.wipe,
-    RoomInteraction.organize || RoomInteraction.pickUp => _AvatarPose.organize,
-    RoomInteraction.look ||
-    RoomInteraction.stop ||
-    RoomInteraction.askHelp => _AvatarPose.wave,
-    RoomInteraction.flush || RoomInteraction.useToilet => _AvatarPose.use,
-    _ => _AvatarPose.use,
+  _AvatarPose _poseForFacing(AvatarFacing facing) => switch (facing) {
+    AvatarFacing.front => _AvatarPose.front,
+    AvatarFacing.back => _AvatarPose.back,
+    AvatarFacing.left => _AvatarPose.left,
+    AvatarFacing.right => _AvatarPose.right,
+  };
+
+  _AvatarPose _poseForRoomFacing(RoomFacing facing) => switch (facing) {
+    RoomFacing.front => _AvatarPose.front,
+    RoomFacing.back => _AvatarPose.back,
+    RoomFacing.left => _AvatarPose.left,
+    RoomFacing.right => _AvatarPose.right,
   };
 
   String _interactionCopy(RoomInteraction interaction) => switch (interaction) {
@@ -185,6 +235,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
           ),
       interaction: _interactionForAnimation(item.interactionAnimation),
       interactionAnimation: item.interactionAnimation,
+      interactionFacing: _facingForAcquired(item.interactionAnimation),
       relatedActionIds: item.relatedActionIds.toSet(),
     );
     _moveTo(object.approachPoint, interactionTarget: object);
@@ -206,6 +257,13 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
         'wear_shirt' || 'wear_pants' || 'wear_shoes' => RoomInteraction.dress,
         _ => RoomInteraction.organize,
       };
+
+  RoomFacing _facingForAcquired(String animation) => switch (animation) {
+    'stop_and_look' ||
+    'check_traffic_light' ||
+    'ask_for_help' => RoomFacing.front,
+    _ => RoomFacing.back,
+  };
 
   void _reactToAvatar() {
     _arrivalTimer?.cancel();
@@ -274,6 +332,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
         position: _position,
         pose: _pose,
         moving: _moving,
+        movementDuration: _movementDuration,
         bubble: _bubble,
         interactionAnimation: _activeObject?.interactionAnimation,
         placements: index == _roomIndex ? _placements : const [],
@@ -316,6 +375,7 @@ class _RoomScene extends StatelessWidget {
     required this.position,
     required this.pose,
     required this.moving,
+    required this.movementDuration,
     required this.bubble,
     required this.interactionAnimation,
     required this.placements,
@@ -334,6 +394,7 @@ class _RoomScene extends StatelessWidget {
   final RoomPoint position;
   final _AvatarPose pose;
   final bool moving;
+  final Duration movementDuration;
   final String? bubble;
   final String? interactionAnimation;
   final List<SpacePlacement> placements;
@@ -356,7 +417,10 @@ class _RoomScene extends StatelessWidget {
       final avatarWidth = 126 * depthScale;
       // 모션 그림 한 칸 아래에 남은 투명 여백을 보정해 보이는 발이
       // 논리적인 발 좌표와 그림자에 맞닿게 한다.
-      final spriteFootInset = 10 * depthScale;
+      final spriteFootInset =
+          AvatarCharacterMetrics.visibleGroundInset /
+          AvatarCharacterMetrics.frameHeight *
+          avatarHeight;
       final depthChildren =
           <({double depth, int order, Widget child})>[
             for (final object in room.fixedObjects)
@@ -382,7 +446,7 @@ class _RoomScene extends StatelessWidget {
                 depth: position.y,
                 order: 2,
                 child: AnimatedPositioned(
-                  duration: const Duration(milliseconds: 1200),
+                  duration: movementDuration,
                   curve: Curves.easeInOutCubic,
                   left: foot.dx - 34 * depthScale,
                   top: foot.dy - 7,
@@ -401,7 +465,7 @@ class _RoomScene extends StatelessWidget {
                 depth: position.y,
                 order: 3,
                 child: AnimatedPositioned(
-                  duration: const Duration(milliseconds: 1200),
+                  duration: movementDuration,
                   curve: Curves.easeInOutCubic,
                   left: (foot.dx - avatarWidth / 2).clamp(
                     2,
@@ -612,88 +676,84 @@ class _AvatarSprite extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: motion,
     builder: (context, _) {
-      final bounce = moving ? sin(motion.value * pi) * 3 : 0.0;
-      final interactionScale = interactionAnimation == null
-          ? 1.0
-          : 1 + sin(motion.value * pi) * .035;
+      // All states share a normalized 360x600 canvas, bottom-center ground
+      // anchor and a single runtime scale. No direction/state correction.
+      const runtimeScale = AvatarCharacterMetrics.runtimeScale;
       return Transform.scale(
-        scale: interactionScale,
-        alignment: Alignment.bottomCenter,
-        child: Transform.translate(
-          offset: Offset(0, -bounce),
-          child: GestureDetector(
-            onTap: onTap,
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.bottomCenter,
-              children: [
-                Positioned.fill(
-                  child: interactionAnimation != null && !moving
-                      ? _InteractionCell(animation: interactionAnimation!)
-                      : equipped['top'] == 'avatar_top_01' &&
-                            pose == _AvatarPose.front &&
-                            !moving
-                      ? Image.asset(
-                          'assets/avatars/avatar_blue_top.png',
-                          fit: BoxFit.contain,
-                          alignment: Alignment.bottomCenter,
-                        )
-                      : _MotionCell(
-                          pose: pose,
-                          walkFrame: moving
-                              ? (motion.value * 3).floor().clamp(0, 2)
-                              : 1,
-                          walking: moving,
-                        ),
+        scale: runtimeScale,
+        alignment: AvatarCharacterMetrics.groundAnchor,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.bottomCenter,
+            children: [
+              Positioned.fill(
+                child: interactionAnimation != null && !moving
+                    ? _InteractionCell(animation: interactionAnimation!)
+                    : equipped['top'] == 'avatar_top_01' &&
+                          pose == _AvatarPose.front &&
+                          !moving
+                    ? Image.asset(
+                        'assets/avatars/normalized/avatar_blue_top.png',
+                        fit: BoxFit.fill,
+                        alignment: AvatarCharacterMetrics.groundAnchor,
+                      )
+                    : _MotionCell(
+                        pose: pose,
+                        walkFrame: moving
+                            ? (motion.value * 4).floor().clamp(0, 3)
+                            : 1,
+                        walking: moving,
+                      ),
+              ),
+              if (equipped['hat'] != null)
+                Positioned(
+                  top: 1,
+                  child: AvatarRewardItemSprite(
+                    itemId: equipped['hat']!,
+                    size: 42,
+                  ),
                 ),
-                if (equipped['hat'] != null)
-                  Positioned(
-                    top: 1,
-                    child: AvatarRewardItemSprite(
-                      itemId: equipped['hat']!,
-                      size: 42,
+              if (equipped['accessory'] != null)
+                Positioned(
+                  right: 1,
+                  bottom: 30,
+                  child: AvatarRewardItemSprite(
+                    itemId: equipped['accessory']!,
+                    size: 36,
+                  ),
+                ),
+              if (_feedbackIcon(interactionAnimation) case final icon?)
+                Positioned(
+                  right: 8,
+                  top: 42,
+                  child: Text(icon, style: const TextStyle(fontSize: 24)),
+                ),
+              if (bubble != null)
+                Positioned(
+                  top: -38,
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 170),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 6,
                     ),
-                  ),
-                if (equipped['accessory'] != null)
-                  Positioned(
-                    right: 1,
-                    bottom: 30,
-                    child: AvatarRewardItemSprite(
-                      itemId: equipped['accessory']!,
-                      size: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: .94),
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                  ),
-                if (_feedbackIcon(interactionAnimation) case final icon?)
-                  Positioned(
-                    right: 8,
-                    top: 42,
-                    child: Text(icon, style: const TextStyle(fontSize: 24)),
-                  ),
-                if (bubble != null)
-                  Positioned(
-                    top: -38,
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 170),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: .94),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(
-                        bubble!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    child: Text(
+                      bubble!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
       );
@@ -737,8 +797,8 @@ class _InteractionCell extends StatelessWidget {
       _ => null,
     };
     if (extraIndex != null) {
-      return _AtlasCell(
-        asset: 'assets/avatars/avatar_interaction_extra_atlas.png',
+      return AvatarAtlasCell(
+        asset: AvatarAnimationRegistry.interactionExtraAsset,
         columns: 4,
         rows: 2,
         column: extraIndex % 4,
@@ -774,52 +834,14 @@ class _InteractionCell extends StatelessWidget {
     };
     final column = index % 4;
     final row = index ~/ 4;
-    return _AtlasCell(
-      asset: 'assets/avatars/avatar_interaction_atlas.png',
+    return AvatarAtlasCell(
+      asset: AvatarAnimationRegistry.interactionAsset,
       columns: 4,
       rows: 4,
       column: column,
       row: row,
     );
   }
-}
-
-class _AtlasCell extends StatelessWidget {
-  const _AtlasCell({
-    required this.asset,
-    required this.columns,
-    required this.rows,
-    required this.column,
-    required this.row,
-  });
-
-  final String asset;
-  final int columns;
-  final int rows;
-  final int column;
-  final int row;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) => ClipRect(
-      child: OverflowBox(
-        alignment: Alignment(
-          columns == 1 ? 0 : -1 + column * (2 / (columns - 1)),
-          rows == 1 ? 0 : -1 + row * (2 / (rows - 1)),
-        ),
-        minWidth: box.maxWidth * columns,
-        maxWidth: box.maxWidth * columns,
-        minHeight: box.maxHeight * rows,
-        maxHeight: box.maxHeight * rows,
-        child: Image.asset(
-          asset,
-          width: box.maxWidth * columns,
-          height: box.maxHeight * rows,
-          fit: BoxFit.fill,
-        ),
-      ),
-    ),
-  );
 }
 
 class _MotionCell extends StatelessWidget {
@@ -846,22 +868,12 @@ class _MotionCell extends StatelessWidget {
         _AvatarPose.right => 3,
         _ => 0,
       };
-      return LayoutBuilder(
-        builder: (context, box) => ClipRect(
-          child: OverflowBox(
-            alignment: Alignment(-1.0 + walkFrame, -1 + row * (2 / 3)),
-            minWidth: box.maxWidth * 3,
-            maxWidth: box.maxWidth * 3,
-            minHeight: box.maxHeight * 4,
-            maxHeight: box.maxHeight * 4,
-            child: Image.asset(
-              'assets/avatars/avatar_walk_atlas.png',
-              width: box.maxWidth * 3,
-              height: box.maxHeight * 4,
-              fit: BoxFit.fill,
-            ),
-          ),
-        ),
+      return AvatarAtlasCell(
+        asset: AvatarAnimationRegistry.walkAsset,
+        columns: 4,
+        rows: 4,
+        column: walkFrame,
+        row: row,
       );
     }
     final (column, row) = switch (pose) {
@@ -874,22 +886,12 @@ class _MotionCell extends StatelessWidget {
       _AvatarPose.organize => (2, 1),
       _AvatarPose.wave => (3, 1),
     };
-    return LayoutBuilder(
-      builder: (context, box) => ClipRect(
-        child: OverflowBox(
-          alignment: Alignment(-1 + column * (2 / 3), -1 + row * 2),
-          minWidth: box.maxWidth * 4,
-          maxWidth: box.maxWidth * 4,
-          minHeight: box.maxHeight * 2,
-          maxHeight: box.maxHeight * 2,
-          child: Image.asset(
-            'assets/avatars/avatar_motion_atlas.png',
-            width: box.maxWidth * 4,
-            height: box.maxHeight * 2,
-            fit: BoxFit.fill,
-          ),
-        ),
-      ),
+    return AvatarAtlasCell(
+      asset: AvatarAnimationRegistry.idleAsset,
+      columns: 4,
+      rows: 2,
+      column: column,
+      row: row,
     );
   }
 }

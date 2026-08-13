@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:growup/avatar_reward_catalog.dart';
+import 'package:growup/avatar_character_system.dart';
 import 'package:growup/avatar_room.dart';
 import 'package:growup/card_detail_content.dart';
 import 'package:growup/growth_reward_repository.dart';
@@ -222,6 +223,80 @@ void main() {
       }
     },
   );
+
+  test('avatar movement speed is exactly 20 percent of the previous speed', () {
+    expect(AvatarMovementSystem.speedMultiplier, .2);
+    expect(
+      AvatarMovementSystem.journeyDuration,
+      const Duration(milliseconds: 6000),
+    );
+    final split = AvatarMovementSystem.durations(const RoomPoint(0, 0), const [
+      RoomPoint(10, 0),
+      RoomPoint(30, 0),
+    ]);
+    expect(split, const [Duration(milliseconds: 2000), Duration(seconds: 4)]);
+    expect(
+      split.fold<int>(0, (sum, duration) => sum + duration.inMilliseconds),
+      AvatarMovementSystem.journeyDuration.inMilliseconds,
+    );
+    expect(
+      AvatarMovementSystem.durations(const RoomPoint(0, 0), const [
+        RoomPoint(20, 0),
+      ]).single,
+      const Duration(milliseconds: 6000),
+    );
+  });
+
+  test('avatar directions use one shared four-frame registry', () {
+    expect(AvatarAnimationRegistry.walkFramesPerDirection, 4);
+    expect(AvatarAnimationRegistry.directionRow(AvatarFacing.front), 0);
+    expect(AvatarAnimationRegistry.directionRow(AvatarFacing.back), 1);
+    expect(AvatarAnimationRegistry.directionRow(AvatarFacing.left), 2);
+    expect(AvatarAnimationRegistry.directionRow(AvatarFacing.right), 3);
+    expect(AvatarCharacterMetrics.runtimeScale, 1);
+    expect(AvatarCharacterMetrics.groundAnchor, Alignment.bottomCenter);
+  });
+
+  test('movement path does not cross a room obstacle', () {
+    const walkable = WalkableArea([
+      RoomPoint(0, 0),
+      RoomPoint(100, 0),
+      RoomPoint(100, 100),
+      RoomPoint(0, 100),
+    ]);
+    const obstacle = RoomRect(40, 30, 20, 40);
+    final path = AvatarMovementSystem.path(
+      from: const RoomPoint(20, 20),
+      wanted: const RoomPoint(80, 80),
+      walkableArea: walkable,
+      obstacles: const [obstacle],
+    );
+    expect(path.length, greaterThanOrEqualTo(2));
+    var cursor = const RoomPoint(20, 20);
+    for (final destination in path) {
+      final distance = cursor.distanceTo(destination);
+      for (var step = 0; step <= distance.ceil(); step++) {
+        final ratio = distance == 0 ? 0.0 : step / distance.ceil();
+        final sample = RoomPoint(
+          cursor.x + (destination.x - cursor.x) * ratio,
+          cursor.y + (destination.y - cursor.y) * ratio,
+        );
+        expect(obstacle.contains(sample), isFalse);
+        expect(walkable.contains(sample), isTrue);
+      }
+      cursor = destination;
+    }
+  });
+
+  test('every room interaction resolves to an allowed ground point', () {
+    for (final room in avatarRooms) {
+      for (final object in room.fixedObjects) {
+        final point = object.resolvedInteractionPoint;
+        expect(room.walkableArea.contains(point), isTrue);
+        expect(room.collisions.any((area) => area.contains(point)), isFalse);
+      }
+    }
+  });
 
   test('toilet rewards stay in the toilet theme', () {
     final toiletItems = avatarRewardItems.where(
