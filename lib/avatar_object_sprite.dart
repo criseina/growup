@@ -67,6 +67,10 @@ class AvatarObjectSprite extends StatelessWidget {
       'safety_stop_01' => (asset: atlasB, column: 1, row: 2),
       'safety_crosswalk_01' => (asset: atlasB, column: 2, row: 2),
       'safety_contact_01' => (asset: atlasB, column: 3, row: 2),
+      'toilet_paper_01' => (asset: atlasA, column: 1, row: 0),
+      'toilet_wipes_01' => (asset: atlasB, column: 2, row: 1),
+      'toilet_soap_01' => (asset: atlasA, column: 0, row: 0),
+      'toilet_towel_01' => (asset: atlasA, column: 1, row: 0),
       _ => null,
     };
   }

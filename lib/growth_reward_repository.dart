@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'avatar_reward_catalog.dart';
+import 'avatar_room.dart';
 
 enum UnlockableItemType { avatarItem, spaceItem }
 
@@ -14,6 +15,8 @@ class UnlockableItem {
     required this.category,
     required this.icon,
     required this.spaceId,
+    this.interactionAnimation = 'organize',
+    this.relatedActionIds = const <String>[],
   });
 
   final String id;
@@ -22,6 +25,8 @@ class UnlockableItem {
   final String category;
   final String icon;
   final String? spaceId;
+  final String interactionAnimation;
+  final List<String> relatedActionIds;
 }
 
 class GrowthEvent {
@@ -101,15 +106,16 @@ class SpacePlacement {
     'createdAt': createdAt.toIso8601String(),
   };
 
-  SpacePlacement copyWith({double? x, double? y}) => SpacePlacement(
-    id: id,
-    profileId: profileId,
-    spaceId: spaceId,
-    itemId: itemId,
-    x: x ?? this.x,
-    y: y ?? this.y,
-    createdAt: createdAt,
-  );
+  SpacePlacement copyWith({String? spaceId, double? x, double? y}) =>
+      SpacePlacement(
+        id: id,
+        profileId: profileId,
+        spaceId: spaceId ?? this.spaceId,
+        itemId: itemId,
+        x: x ?? this.x,
+        y: y ?? this.y,
+        createdAt: createdAt,
+      );
 }
 
 class GrowthRewardRepository {
@@ -361,9 +367,15 @@ class GrowthRewardRepository {
 
   Future<List<UnlockableItem>> unlockedItems(String profileId) async {
     final preferences = await SharedPreferences.getInstance();
-    final ids =
-        _decodeStringMap(preferences.getString(_unlockedKey))[profileId] ??
-        const <String>[];
+    final ids = <String>{
+      ...(_decodeStringMap(preferences.getString(_unlockedKey))[profileId] ??
+          const <String>[]),
+    };
+    // 보상 연결표가 바뀌어도 이미 기록한 행동의 새 보상을 잃지 않게 한다.
+    for (final event in await loadEvents(profileId)) {
+      final currentRewardId = avatarRewardByCardId[event.cardId];
+      if (currentRewardId != null) ids.add(currentRewardId);
+    }
     return avatarRewardItems.where((item) => ids.contains(item.id)).toList();
   }
 
@@ -411,6 +423,51 @@ class GrowthRewardRepository {
   }) async {
     final preferences = await SharedPreferences.getInstance();
     final placements = _decodePlacements(preferences.getString(_placementsKey));
+    var placementChanged = false;
+    if (spaceId == 'entrance') {
+      for (var index = 0; index < placements.length; index++) {
+        final placement = placements[index];
+        if (placement.profileId == profileId && placement.spaceId == 'safety') {
+          final migratedPoint = switch (placement.itemId) {
+            'safety_cone_01' => (x: .53, y: .62),
+            'safety_stop_01' => (x: .62, y: .60),
+            'safety_crosswalk_01' => (x: .70, y: .59),
+            _ => (x: .39, y: .43),
+          };
+          placements[index] = placement.copyWith(
+            spaceId: 'entrance',
+            x: migratedPoint.x,
+            y: migratedPoint.y,
+          );
+          placementChanged = true;
+        }
+      }
+    }
+    final room = roomById(spaceId);
+    for (var index = 0; index < placements.length; index++) {
+      final placement = placements[index];
+      if (placement.profileId != profileId || placement.spaceId != spaceId) {
+        continue;
+      }
+      final slot = room.nearestAcceptingSlot(
+        placement.itemId,
+        RoomPoint(placement.x * 100, placement.y * 100),
+      );
+      if (slot != null &&
+          slot.position.distanceTo(
+                RoomPoint(placement.x * 100, placement.y * 100),
+              ) >
+              .1) {
+        placements[index] = placement.copyWith(
+          x: slot.position.x / 100,
+          y: slot.position.y / 100,
+        );
+        placementChanged = true;
+      }
+    }
+    if (placementChanged) {
+      await _savePlacements(preferences, placements);
+    }
     final result = placements
         .where(
           (placement) =>
@@ -421,7 +478,10 @@ class GrowthRewardRepository {
 
     // Migrate the previous toggle-only placements once, preserving earned work.
     final legacy = _decodeStringMap(preferences.getString(_spaceKey));
-    final legacyIds = legacy['$profileId:$spaceId'] ?? const <String>[];
+    final legacyIds = <String>{
+      ...?legacy['$profileId:$spaceId'],
+      if (spaceId == 'entrance') ...?legacy['$profileId:safety'],
+    }.toList();
     if (legacyIds.isEmpty) return result;
     final migrated = <SpacePlacement>[
       for (var index = 0; index < legacyIds.length; index++)
@@ -430,8 +490,26 @@ class GrowthRewardRepository {
           profileId: profileId,
           spaceId: spaceId,
           itemId: legacyIds[index],
-          x: .16 + (index % 3) * .25,
-          y: .62 + (index ~/ 3) * .12,
+          x:
+              (roomById(spaceId)
+                      .nearestAcceptingSlot(
+                        legacyIds[index],
+                        const RoomPoint(50, 50),
+                      )
+                      ?.position
+                      .x ??
+                  50) /
+              100,
+          y:
+              (roomById(spaceId)
+                      .nearestAcceptingSlot(
+                        legacyIds[index],
+                        const RoomPoint(50, 50),
+                      )
+                      ?.position
+                      .y ??
+                  70) /
+              100,
           createdAt: DateTime.now(),
         ),
     ];
@@ -468,14 +546,24 @@ class GrowthRewardRepository {
         '획득 오브젝트는 지정된 테마에만 배치할 수 있습니다.',
       );
     }
+    final room = roomById(spaceId);
+    final requested = RoomPoint(x * 100, y * 100);
+    final slot = room.nearestAcceptingSlot(itemId, requested);
+    if (slot == null || slot.position.distanceTo(requested) > 20) {
+      throw ArgumentError.value(
+        '$x,$y',
+        'position',
+        '이 아이템을 놓을 수 있는 배치 자리여야 합니다.',
+      );
+    }
     final placements = await loadPlacements(
       profileId: profileId,
       spaceId: spaceId,
     );
     final matches = placements.where((item) => item.itemId == itemId).toList();
     final existing = matches.isEmpty ? null : matches.first;
-    final clampedX = x.clamp(.04, .88).toDouble();
-    final clampedY = y.clamp(.10, .78).toDouble();
+    final clampedX = (slot.position.x / 100).clamp(.04, .96).toDouble();
+    final clampedY = (slot.position.y / 100).clamp(.04, .92).toDouble();
     final placement =
         existing?.copyWith(x: clampedX, y: clampedY) ??
         SpacePlacement(

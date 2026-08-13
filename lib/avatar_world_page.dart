@@ -33,7 +33,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
   Timer? _arrivalTimer;
   Timer? _interactionTimer;
   int _roomIndex = 0;
-  RoomPoint _position = const RoomPoint(50, 77);
+  RoomPoint _position = avatarRooms.first.initialAvatarPosition;
   _AvatarPose _pose = _AvatarPose.front;
   bool _moving = false;
   String? _bubble;
@@ -68,21 +68,23 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
   void _scheduleAutonomy() {
     _autonomyTimer?.cancel();
     _autonomyTimer = Timer(Duration(seconds: 4 + _random.nextInt(4)), () {
-      if (!mounted || _moving || _activeObject != null) return;
-      if (_placements.isNotEmpty && _random.nextBool()) {
-        final placement = _placements[_random.nextInt(_placements.length)];
-        _approachAcquired(placement);
-      } else if (_random.nextInt(4) == 0) {
-        final object =
-            _room.fixedObjects[_random.nextInt(_room.fixedObjects.length)];
-        _approachFixed(object);
-      } else {
-        _moveTo(
-          RoomPoint(
-            16 + _random.nextDouble() * 68,
-            67 + _random.nextDouble() * 22,
-          ),
-        );
+      if (!mounted) return;
+      if (!_moving && _activeObject == null) {
+        if (_placements.isNotEmpty && _random.nextBool()) {
+          final placement = _placements[_random.nextInt(_placements.length)];
+          _approachAcquired(placement);
+        } else if (_random.nextInt(4) == 0) {
+          final object =
+              _room.fixedObjects[_random.nextInt(_room.fixedObjects.length)];
+          _approachFixed(object);
+        } else {
+          _moveTo(
+            RoomPoint(
+              16 + _random.nextDouble() * 68,
+              67 + _random.nextDouble() * 22,
+            ),
+          );
+        }
       }
       _scheduleAutonomy();
     });
@@ -135,6 +137,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
     RoomInteraction.look ||
     RoomInteraction.stop ||
     RoomInteraction.askHelp => _AvatarPose.wave,
+    RoomInteraction.flush || RoomInteraction.useToilet => _AvatarPose.use,
     _ => _AvatarPose.use,
   };
 
@@ -153,6 +156,8 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
     RoomInteraction.stop => ' 앞에서 멈춰 살펴요',
     RoomInteraction.askHelp => '로 도움을 요청해요',
     RoomInteraction.rest => '에서 잠시 쉬어요',
+    RoomInteraction.useToilet => '에 앉아 봐요',
+    RoomInteraction.flush => '을 눌러 물을 내려요',
   };
 
   void _approachFixed(RoomObject object) =>
@@ -163,51 +168,43 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
         .where((candidate) => candidate.id == placement.itemId)
         .firstOrNull;
     if (item == null || item.spaceId != _room.id) return;
+    final placementPoint = RoomPoint(placement.x * 100, placement.y * 100);
+    final slot = _room.nearestAcceptingSlot(item.id, placementPoint);
     final object = RoomObject(
       id: placement.id,
       name: item.name,
       kind: RoomObjectKind.acquired,
       itemId: item.id,
       position: RoomPoint(placement.x * 100, placement.y * 100),
-      approachPoint: _room.walkableArea.clamp(
-        RoomPoint(placement.x * 100, placement.y * 100 + 12),
-        _room.collisions,
-      ),
-      interaction: _interactionForItem(item.id),
+      approachPoint:
+          slot?.approachPoint ??
+          _room.walkableArea.clamp(
+            RoomPoint(placement.x * 100, placement.y * 100 + 12),
+            _room.collisions,
+          ),
+      interaction: _interactionForAnimation(item.interactionAnimation),
+      interactionAnimation: item.interactionAnimation,
+      relatedActionIds: item.relatedActionIds.toSet(),
     );
     _moveTo(object.approachPoint, interactionTarget: object);
   }
 
-  RoomInteraction _interactionForItem(String itemId) {
-    if (itemId.contains('soap') || itemId.contains('shampoo')) {
-      return RoomInteraction.wash;
-    }
-    if (itemId.contains('toothbrush')) return RoomInteraction.brush;
-    if (itemId.contains('towel') || itemId.contains('cloth')) {
-      return RoomInteraction.dry;
-    }
-    if (itemId.contains('cup') || itemId.contains('bottle')) {
-      return RoomInteraction.drink;
-    }
-    if (itemId.contains('dishes') || itemId.contains('cutlery')) {
-      return RoomInteraction.eat;
-    }
-    if (itemId.contains('cone') ||
-        itemId.contains('stop') ||
-        itemId.contains('crosswalk')) {
-      return RoomInteraction.stop;
-    }
-    if (itemId.contains('contact')) return RoomInteraction.askHelp;
-    if (itemId.contains('bag') ||
-        itemId.contains('umbrella') ||
-        itemId.contains('wipes')) {
-      return RoomInteraction.prepare;
-    }
-    if (itemId.contains('rack') || itemId.contains('hat')) {
-      return RoomInteraction.dress;
-    }
-    return RoomInteraction.organize;
-  }
+  RoomInteraction _interactionForAnimation(String animation) =>
+      switch (animation) {
+        'wash_hands' || 'wash_hair' => RoomInteraction.wash,
+        'brush_teeth' => RoomInteraction.brush,
+        'dry' || 'clean' || 'wipe' => RoomInteraction.dry,
+        'drink' => RoomInteraction.drink,
+        'eat' => RoomInteraction.eat,
+        'stop_and_look' || 'check_traffic_light' => RoomInteraction.stop,
+        'ask_for_help' => RoomInteraction.askHelp,
+        'prepare_bag' ||
+        'prepare_bottle' ||
+        'prepare_small_items' ||
+        'prepare_umbrella' => RoomInteraction.prepare,
+        'wear_shirt' || 'wear_pants' || 'wear_shoes' => RoomInteraction.dress,
+        _ => RoomInteraction.organize,
+      };
 
   void _reactToAvatar() {
     _arrivalTimer?.cancel();
@@ -258,10 +255,13 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
       controller: _pageController,
       itemCount: avatarRooms.length,
       onPageChanged: (index) {
+        _arrivalTimer?.cancel();
+        _interactionTimer?.cancel();
         setState(() {
           _roomIndex = index;
-          _position = const RoomPoint(50, 77);
+          _position = avatarRooms[index].initialAvatarPosition;
           _pose = _AvatarPose.front;
+          _moving = false;
           _bubble = null;
           _activeObject = null;
         });
@@ -274,23 +274,16 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
         pose: _pose,
         moving: _moving,
         bubble: _bubble,
+        interactionAnimation: _activeObject?.interactionAnimation,
         placements: index == _roomIndex ? _placements : const [],
         motion: _motion,
         equipped: _equipped,
         onFloorTap: (point) => _moveTo(point),
         onFixedTap: _approachFixed,
         onItemTap: _approachAcquired,
+        onItemLongPress: () => _openDecoration(),
         onAvatarTap: _reactToAvatar,
-        onDecorate: () => Navigator.of(context)
-            .push(
-              MaterialPageRoute(
-                builder: (_) => SpacePage(
-                  profileId: widget.profileId,
-                  initialSpaceId: _room.id,
-                ),
-              ),
-            )
-            .then((_) => _loadRoom()),
+        onDecorate: _openDecoration,
       ),
     ),
     bottomNavigationBar: _AvatarNavigation(
@@ -299,6 +292,15 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
       onRecords: () => _go(GrowthRecordPage(profileId: widget.profileId)),
     ),
   );
+
+  void _openDecoration() => Navigator.of(context)
+      .push(
+        MaterialPageRoute(
+          builder: (_) =>
+              SpacePage(profileId: widget.profileId, initialSpaceId: _room.id),
+        ),
+      )
+      .then((_) => _loadRoom());
 
   void _go(Widget page) => Navigator.of(context).pushAndRemoveUntil(
     MaterialPageRoute(builder: (_) => page),
@@ -314,12 +316,14 @@ class _RoomScene extends StatelessWidget {
     required this.pose,
     required this.moving,
     required this.bubble,
+    required this.interactionAnimation,
     required this.placements,
     required this.motion,
     required this.equipped,
     required this.onFloorTap,
     required this.onFixedTap,
     required this.onItemTap,
+    required this.onItemLongPress,
     required this.onAvatarTap,
     required this.onDecorate,
   });
@@ -330,12 +334,14 @@ class _RoomScene extends StatelessWidget {
   final _AvatarPose pose;
   final bool moving;
   final String? bubble;
+  final String? interactionAnimation;
   final List<SpacePlacement> placements;
   final Animation<double> motion;
   final Map<String, String> equipped;
   final ValueChanged<RoomPoint> onFloorTap;
   final ValueChanged<RoomObject> onFixedTap;
   final ValueChanged<SpacePlacement> onItemTap;
+  final VoidCallback onItemLongPress;
   final VoidCallback onAvatarTap;
   final VoidCallback onDecorate;
 
@@ -347,6 +353,9 @@ class _RoomScene extends StatelessWidget {
       final depthScale = .78 + (position.y / 100) * .25;
       final avatarHeight = 210 * depthScale;
       final avatarWidth = 126 * depthScale;
+      // 모션 그림 한 칸 아래에 남은 투명 여백을 보정해 보이는 발이
+      // 논리적인 발 좌표와 그림자에 맞닿게 한다.
+      final spriteFootInset = 10 * depthScale;
       return Stack(
         fit: StackFit.expand,
         clipBehavior: Clip.hardEdge,
@@ -374,6 +383,7 @@ class _RoomScene extends StatelessWidget {
               placement: placement,
               size: size,
               onTap: () => onItemTap(placement),
+              onLongPress: onItemLongPress,
             ),
           if (active)
             AnimatedPositioned(
@@ -398,7 +408,7 @@ class _RoomScene extends StatelessWidget {
                 2,
                 size.width - avatarWidth - 2,
               ),
-              top: (foot.dy - avatarHeight).clamp(
+              top: (foot.dy - avatarHeight + spriteFootInset).clamp(
                 4,
                 size.height - avatarHeight - 12,
               ),
@@ -409,6 +419,7 @@ class _RoomScene extends StatelessWidget {
                   pose: pose,
                   moving: moving,
                   bubble: bubble,
+                  interactionAnimation: interactionAnimation,
                   motion: motion,
                   equipped: equipped,
                   onTap: onAvatarTap,
@@ -453,12 +464,12 @@ class _RoomScene extends StatelessWidget {
   );
 
   String _categoryLabel(String roomId) => switch (roomId) {
-    'bathroom' => '위생 · 화장실',
+    'bathroom' => '위생',
     'bedroom' => '옷 입기',
     'kitchen' => '식사',
     'playroom' => '물건과 집안일',
-    'entrance' => '외출 준비',
-    'safety' => '안전과 도움 요청',
+    'entrance' => '외출 준비 · 안전',
+    'toilet' => '화장실',
     _ => '',
   };
 }
@@ -477,8 +488,8 @@ class _FixedObjectHotspot extends StatelessWidget {
   Widget build(BuildContext context) {
     final point = object.position.toScreen(size);
     final rect = object.collision;
-    final width = (rect?.width ?? 16) * size.width / 100;
-    final height = (rect?.height ?? 16) * size.height / 100;
+    final width = (rect?.width ?? object.hitWidth) * size.width / 100;
+    final height = (rect?.height ?? object.hitHeight) * size.height / 100;
     return Positioned(
       left: point.dx - width / 2,
       top: point.dy - height / 2,
@@ -502,10 +513,12 @@ class _AcquiredObject extends StatelessWidget {
     required this.placement,
     required this.size,
     required this.onTap,
+    required this.onLongPress,
   });
   final SpacePlacement placement;
   final Size size;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) => Positioned(
@@ -516,6 +529,7 @@ class _AcquiredObject extends StatelessWidget {
       label: '획득 아이템과 상호작용',
       child: GestureDetector(
         onTap: onTap,
+        onLongPress: onLongPress,
         child: AvatarObjectSprite(itemId: placement.itemId, size: 62),
       ),
     ),
@@ -527,6 +541,7 @@ class _AvatarSprite extends StatelessWidget {
     required this.pose,
     required this.moving,
     required this.bubble,
+    required this.interactionAnimation,
     required this.motion,
     required this.equipped,
     required this.onTap,
@@ -534,6 +549,7 @@ class _AvatarSprite extends StatelessWidget {
   final _AvatarPose pose;
   final bool moving;
   final String? bubble;
+  final String? interactionAnimation;
   final Animation<double> motion;
   final Map<String, String> equipped;
   final VoidCallback onTap;
@@ -543,55 +559,96 @@ class _AvatarSprite extends StatelessWidget {
     animation: motion,
     builder: (context, _) {
       final bounce = moving ? sin(motion.value * pi) * 3 : 0.0;
-      return Transform.translate(
-        offset: Offset(0, -bounce),
-        child: GestureDetector(
-          onTap: onTap,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.bottomCenter,
-            children: [
-              Positioned.fill(child: _MotionCell(pose: pose)),
-              if (equipped['hat'] != null)
-                const Positioned(
-                  top: 5,
-                  child: Text('🧢', style: TextStyle(fontSize: 28)),
+      final interactionScale = interactionAnimation == null
+          ? 1.0
+          : 1 + sin(motion.value * pi) * .035;
+      return Transform.scale(
+        scale: interactionScale,
+        alignment: Alignment.bottomCenter,
+        child: Transform.translate(
+          offset: Offset(0, -bounce),
+          child: GestureDetector(
+            onTap: onTap,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                Positioned.fill(
+                  child:
+                      equipped['top'] == 'avatar_top_01' &&
+                          pose == _AvatarPose.front &&
+                          !moving
+                      ? Image.asset(
+                          'assets/avatars/avatar_blue_top.png',
+                          fit: BoxFit.contain,
+                          alignment: Alignment.bottomCenter,
+                        )
+                      : _MotionCell(pose: pose),
                 ),
-              if (equipped['accessory'] != null)
-                const Positioned(
-                  right: 3,
-                  bottom: 35,
-                  child: Text('🎒', style: TextStyle(fontSize: 25)),
-                ),
-              if (bubble != null)
-                Positioned(
-                  top: -38,
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 170),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: .94),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(
-                      bubble!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
+                if (equipped['hat'] != null)
+                  const Positioned(
+                    top: 5,
+                    child: Text('🧢', style: TextStyle(fontSize: 28)),
+                  ),
+                if (equipped['accessory'] != null)
+                  const Positioned(
+                    right: 3,
+                    bottom: 35,
+                    child: Text('🎒', style: TextStyle(fontSize: 25)),
+                  ),
+                if (_feedbackIcon(interactionAnimation) case final icon?)
+                  Positioned(
+                    right: 8,
+                    top: 42,
+                    child: Text(icon, style: const TextStyle(fontSize: 24)),
+                  ),
+                if (bubble != null)
+                  Positioned(
+                    top: -38,
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 170),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: .94),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        bubble!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       );
     },
   );
+
+  String? _feedbackIcon(String? animation) => switch (animation) {
+    'wash_hands' || 'wash_hair' || 'take_shower' => '🫧',
+    'brush_teeth' => '✨',
+    'dry' || 'clean' || 'wipe' => '🧽',
+    'drink' => '💧',
+    'eat' => '😋',
+    'stop_and_look' || 'check_traffic_light' => '👀',
+    'ask_for_help' => '💬',
+    'use_toilet' || 'flush_toilet' => '✨',
+    'prepare_bag' ||
+    'prepare_bottle' ||
+    'prepare_small_items' ||
+    'prepare_umbrella' => '✓',
+    null => null,
+    _ => '✨',
+  };
 }
 
 class _MotionCell extends StatelessWidget {

@@ -131,6 +131,11 @@ void main() {
     );
     for (final room in avatarRooms) {
       expect(room.walkableArea.polygon.length, greaterThanOrEqualTo(4));
+      expect(
+        room.walkableArea.contains(room.initialAvatarPosition),
+        isTrue,
+        reason: '${room.label}의 시작 발 위치가 바닥 밖에 있습니다.',
+      );
       expect(room.fixedObjects, isNotEmpty);
       expect(room.slots, isNotEmpty);
       final allowedIds = room.slots
@@ -147,6 +152,95 @@ void main() {
         ),
         isTrue,
       );
+      expect(
+        room.fixedObjects.every(
+          (object) => room.walkableArea.contains(object.approachPoint),
+        ),
+        isTrue,
+        reason: '${room.label} 고정 물건의 접근 지점이 바닥 밖에 있습니다.',
+      );
+      expect(
+        room.slots.every(
+          (slot) => room.walkableArea.contains(slot.approachPoint),
+        ),
+        isTrue,
+        reason: '${room.label} 배치 물건의 접근 지점이 바닥 밖에 있습니다.',
+      );
     }
+  });
+
+  test('avatar rooms follow the six-theme specification', () {
+    expect(avatarRooms.map((room) => room.id), [
+      'bathroom',
+      'bedroom',
+      'kitchen',
+      'playroom',
+      'entrance',
+      'toilet',
+    ]);
+    expect(roomById('bathroom').categoryIds, {'hygiene'});
+    expect(
+      roomById('entrance').categoryIds,
+      containsAll({'outing', 'safety_help'}),
+    );
+    expect(roomById('toilet').categoryIds, {'toilet'});
+    expect(
+      avatarRooms.expand((room) => room.categoryIds).toSet(),
+      containsAll({
+        'hygiene',
+        'dressing',
+        'meals',
+        'belongings_home',
+        'outing',
+        'safety_help',
+        'toilet',
+      }),
+    );
+  });
+
+  test('toilet rewards stay in the toilet theme', () {
+    final toiletItems = avatarRewardItems.where(
+      (item) => item.id.startsWith('toilet_'),
+    );
+    expect(toiletItems, hasLength(4));
+    expect(toiletItems.every((item) => item.spaceId == 'toilet'), isTrue);
+    for (var number = 1; number <= 7; number++) {
+      expect(
+        avatarRewardByCardId['T-${number.toString().padLeft(2, '0')}'],
+        startsWith('toilet_'),
+      );
+    }
+  });
+
+  test('rejects placing an acquired object in another theme', () async {
+    SharedPreferences.setMockInitialValues({});
+    final repository = GrowthRewardRepository();
+
+    expect(
+      () => repository.placeItem(
+        profileId: 'child-a',
+        spaceId: 'kitchen',
+        itemId: 'bathroom_soap_01',
+        x: .5,
+        y: .5,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('snaps a valid acquired object to its placement anchor', () async {
+    SharedPreferences.setMockInitialValues({});
+    final repository = GrowthRewardRepository();
+
+    final placement = await repository.placeItem(
+      profileId: 'child-a',
+      spaceId: 'toilet',
+      itemId: 'toilet_soap_01',
+      x: .76,
+      y: .42,
+    );
+
+    expect(placement.x, .76);
+    expect(placement.y, .42);
   });
 }

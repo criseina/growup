@@ -24,7 +24,8 @@
 2. [현재 개발 단계와 다음 일](docs/DEVELOPMENT_ROADMAP.md)
 3. [최근 작업 기록](docs/RECENT_WORK_LOG.md)
 4. [쉬운 용어표](docs/PLAIN_LANGUAGE_GLOSSARY.md)
-5. [휴대폰 시험 안내](docs/BETA_TEST_GUIDE.md)
+5. [아바타 공간 기준](docs/AVATAR_SYSTEM.md)
+6. [휴대폰 시험 안내](docs/BETA_TEST_GUIDE.md)
 
 ## 문서 작성 원칙
 

@@ -255,24 +255,35 @@ class _HomePageState extends State<HomePage> {
                   ).push(MaterialPageRoute(builder: (_) => const AboutPage())),
                   icon: const Icon(Icons.info_outline),
                   tooltip: 'GrowUp 안내',
+                  visualDensity: VisualDensity.compact,
                 ),
                 IconButton(
                   onPressed: _openGrowthStudio,
                   icon: const Icon(Icons.auto_awesome_outlined),
                   tooltip: '성장 꾸미기',
+                  visualDensity: VisualDensity.compact,
                 ),
-                TextButton.icon(
-                  onPressed: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            ProfilePage(activeProfile: _activeProfile),
-                      ),
-                    );
-                    await _loadProfile();
-                  },
-                  icon: const Icon(Icons.face_outlined),
-                  label: Text(_activeProfile.name),
+                Flexible(
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                    ),
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ProfilePage(activeProfile: _activeProfile),
+                        ),
+                      );
+                      await _loadProfile();
+                    },
+                    icon: const Icon(Icons.face_outlined),
+                    label: Text(
+                      _activeProfile.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1067,16 +1078,6 @@ class ActionLibraryPage extends StatefulWidget {
 class _ActionLibraryPageState extends State<ActionLibraryPage> {
   static const _storageKey = 'action_card_levels_v1';
   static const _observationStorageKey = 'action_observations_v1';
-  static const categoryLabels = <String, String>{
-    'hygiene': '개인 위생',
-    'dressing': '옷 입기',
-    'meals': '식사',
-    'belongings_home': '물건과 집안일',
-    'outing': '외출 준비',
-    'safety_help': '안전과 도움 요청',
-    'toilet': '화장실',
-  };
-
   static const finalCategoryLabels = <String, String>{
     'hygiene': '위생',
     'dressing': '옷입기',

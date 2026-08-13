@@ -231,21 +231,28 @@ class _SpacePageState extends State<SpacePage> {
         ? data.itemId
         : '';
     final slot = _slotFor(itemId, point);
+    if (slot == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('이 물건을 놓을 수 있는 자리 가까이에 놓아 주세요.')),
+      );
+      return;
+    }
     if (data is UnlockableItem) {
       await _repository.placeItem(
         profileId: widget.profileId,
         spaceId: _spaceId,
         itemId: data.id,
-        x: slot.x,
-        y: slot.y,
+        x: slot.position.x / 100,
+        y: slot.position.y / 100,
       );
     } else if (data is SpacePlacement) {
       await _repository.placeItem(
         profileId: widget.profileId,
         spaceId: _spaceId,
         itemId: data.itemId,
-        x: slot.x,
-        y: slot.y,
+        x: slot.position.x / 100,
+        y: slot.position.y / 100,
       );
     }
     if (!mounted) return;
@@ -256,20 +263,15 @@ class _SpacePageState extends State<SpacePage> {
   // Decoration slots are shared with AvatarWorldPage through AvatarRoom. The
   // repository keeps the previous 0–1 persisted values for compatibility,
   // while room definitions themselves use the common 0–100 logical system.
-  ({double x, double y}) _slotFor(String itemId, ({double x, double y}) point) {
+  DecorationSlot? _slotFor(String itemId, ({double x, double y}) point) {
     final room = roomById(_spaceId);
     final slot = room.nearestAcceptingSlot(
       itemId,
       RoomPoint(point.x * 100, point.y * 100),
     );
-    if (slot != null) {
-      return (x: slot.position.x / 100, y: slot.position.y / 100);
-    }
-    final allowed = room.walkableArea.clamp(
-      RoomPoint(point.x * 100, point.y * 100),
-      room.collisions,
-    );
-    return (x: allowed.x / 100, y: allowed.y / 100);
+    if (slot == null) return null;
+    final dropPoint = RoomPoint(point.x * 100, point.y * 100);
+    return slot.position.distanceTo(dropPoint) <= 20 ? slot : null;
   }
 
   Future<void> _removeSelected() async {
@@ -320,9 +322,16 @@ class _SpacePageState extends State<SpacePage> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                 child: LayoutBuilder(
                   builder: (context, constraints) => DragTarget<Object>(
-                    onWillAcceptWithDetails: (details) =>
-                        details.data is UnlockableItem ||
-                        details.data is SpacePlacement,
+                    onWillAcceptWithDetails: (details) {
+                      final data = details.data;
+                      final itemId = data is UnlockableItem
+                          ? data.id
+                          : data is SpacePlacement
+                          ? data.itemId
+                          : '';
+                      final item = _itemFor(itemId);
+                      return item != null && item.spaceId == _spaceId;
+                    },
                     onAcceptWithDetails: (details) =>
                         _accept(details.data, details.offset),
                     builder: (context, candidates, _) => Container(
@@ -342,7 +351,19 @@ class _SpacePageState extends State<SpacePage> {
                         children: [
                           Image.asset(space.backgroundAsset, fit: BoxFit.cover),
                           if (candidates.isNotEmpty)
-                            for (final slot in space.slots)
+                            for (final slot in space.slots.where(
+                              (slot) =>
+                                  candidates.isEmpty ||
+                                  slot.accepts(
+                                    candidates.first is UnlockableItem
+                                        ? (candidates.first as UnlockableItem)
+                                              .id
+                                        : candidates.first is SpacePlacement
+                                        ? (candidates.first as SpacePlacement)
+                                              .itemId
+                                        : '',
+                                  ),
+                            ))
                               Positioned(
                                 left:
                                     slot.position.x /
@@ -375,11 +396,11 @@ class _SpacePageState extends State<SpacePage> {
                               ),
                           for (final placement in _placements)
                             Positioned(
-                              left: (placement.x * (constraints.maxWidth - 56))
-                                  .clamp(4, constraints.maxWidth - 60)
+                              left: (placement.x * constraints.maxWidth - 29)
+                                  .clamp(4, constraints.maxWidth - 62)
                                   .toDouble(),
-                              top: (placement.y * (constraints.maxHeight - 56))
-                                  .clamp(8, constraints.maxHeight - 64)
+                              top: (placement.y * constraints.maxHeight - 29)
+                                  .clamp(8, constraints.maxHeight - 66)
                                   .toDouble(),
                               child: LongPressDraggable<Object>(
                                 data: placement,
