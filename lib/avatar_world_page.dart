@@ -8,6 +8,7 @@ import 'avatar_room.dart';
 import 'growth_reward_pages.dart';
 import 'growth_reward_repository.dart';
 import 'main.dart' show ActionLibraryPage, GrowthRecordPage, HomePage;
+import 'room_object_sprite.dart';
 
 enum _AvatarPose { front, back, left, right, use, wipe, organize, wave }
 
@@ -106,7 +107,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
       _bubble = null;
       _activeObject = null;
     });
-    _arrivalTimer = Timer(const Duration(milliseconds: 950), () {
+    _arrivalTimer = Timer(const Duration(milliseconds: 1200), () {
       if (!mounted) return;
       setState(() {
         _moving = false;
@@ -356,11 +357,87 @@ class _RoomScene extends StatelessWidget {
       // 모션 그림 한 칸 아래에 남은 투명 여백을 보정해 보이는 발이
       // 논리적인 발 좌표와 그림자에 맞닿게 한다.
       final spriteFootInset = 10 * depthScale;
+      final depthChildren =
+          <({double depth, int order, Widget child})>[
+            for (final object in room.fixedObjects)
+              if (object.visualLayer == RoomVisualLayer.depthSorted)
+                (
+                  depth: object.visualDepth,
+                  order: 0,
+                  child: _FixedObjectVisual(object: object, size: size),
+                ),
+            for (final placement in placements)
+              (
+                depth: placement.y * 100,
+                order: 1,
+                child: _AcquiredObject(
+                  placement: placement,
+                  size: size,
+                  onTap: () => onItemTap(placement),
+                  onLongPress: onItemLongPress,
+                ),
+              ),
+            if (active)
+              (
+                depth: position.y,
+                order: 2,
+                child: AnimatedPositioned(
+                  duration: const Duration(milliseconds: 1200),
+                  curve: Curves.easeInOutCubic,
+                  left: foot.dx - 34 * depthScale,
+                  top: foot.dy - 7,
+                  child: Container(
+                    width: 68 * depthScale,
+                    height: 12 * depthScale,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: .20),
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                  ),
+                ),
+              ),
+            if (active)
+              (
+                depth: position.y,
+                order: 3,
+                child: AnimatedPositioned(
+                  duration: const Duration(milliseconds: 1200),
+                  curve: Curves.easeInOutCubic,
+                  left: (foot.dx - avatarWidth / 2).clamp(
+                    2,
+                    size.width - avatarWidth - 2,
+                  ),
+                  top: (foot.dy - avatarHeight + spriteFootInset).clamp(
+                    4,
+                    size.height - avatarHeight - 12,
+                  ),
+                  child: SizedBox(
+                    width: avatarWidth,
+                    height: avatarHeight,
+                    child: _AvatarSprite(
+                      pose: pose,
+                      moving: moving,
+                      bubble: bubble,
+                      interactionAnimation: interactionAnimation,
+                      motion: motion,
+                      equipped: equipped,
+                      onTap: onAvatarTap,
+                    ),
+                  ),
+                ),
+              ),
+          ]..sort((a, b) {
+            final byDepth = a.depth.compareTo(b.depth);
+            return byDepth == 0 ? a.order.compareTo(b.order) : byDepth;
+          });
       return Stack(
         fit: StackFit.expand,
         clipBehavior: Clip.hardEdge,
         children: [
           Image.asset(room.backgroundAsset, fit: BoxFit.cover),
+          for (final object in room.fixedObjects)
+            if (object.visualLayer == RoomVisualLayer.back)
+              _FixedObjectVisual(object: object, size: size),
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
@@ -372,59 +449,15 @@ class _RoomScene extends StatelessWidget {
               ),
             ),
           ),
+          for (final entry in depthChildren) entry.child,
+          for (final object in room.fixedObjects)
+            if (object.visualLayer == RoomVisualLayer.front)
+              _FixedObjectVisual(object: object, size: size),
           for (final object in room.fixedObjects)
             _FixedObjectHotspot(
               object: object,
               size: size,
               onTap: () => onFixedTap(object),
-            ),
-          for (final placement in placements)
-            _AcquiredObject(
-              placement: placement,
-              size: size,
-              onTap: () => onItemTap(placement),
-              onLongPress: onItemLongPress,
-            ),
-          if (active)
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 900),
-              curve: Curves.easeInOutCubic,
-              left: foot.dx - 34 * depthScale,
-              top: foot.dy - 7,
-              child: Container(
-                width: 68 * depthScale,
-                height: 12 * depthScale,
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: .20),
-                  borderRadius: BorderRadius.circular(50),
-                ),
-              ),
-            ),
-          if (active)
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 900),
-              curve: Curves.easeInOutCubic,
-              left: (foot.dx - avatarWidth / 2).clamp(
-                2,
-                size.width - avatarWidth - 2,
-              ),
-              top: (foot.dy - avatarHeight + spriteFootInset).clamp(
-                4,
-                size.height - avatarHeight - 12,
-              ),
-              child: SizedBox(
-                width: avatarWidth,
-                height: avatarHeight,
-                child: _AvatarSprite(
-                  pose: pose,
-                  moving: moving,
-                  bubble: bubble,
-                  interactionAnimation: interactionAnimation,
-                  motion: motion,
-                  equipped: equipped,
-                  onTap: onAvatarTap,
-                ),
-              ),
             ),
           Positioned(
             top: 10,
@@ -508,6 +541,27 @@ class _FixedObjectHotspot extends StatelessWidget {
   }
 }
 
+class _FixedObjectVisual extends StatelessWidget {
+  const _FixedObjectVisual({required this.object, required this.size});
+
+  final RoomObject object;
+  final Size size;
+
+  @override
+  Widget build(BuildContext context) {
+    final point = object.position.toScreen(size);
+    final width = object.visualSize.width * size.width / 100;
+    final height = object.visualSize.height * size.height / 100;
+    return Positioned(
+      left: (point.dx - width / 2).clamp(0, size.width - width),
+      top: (point.dy - height / 2).clamp(0, size.height - height),
+      width: width,
+      height: height,
+      child: IgnorePointer(child: RoomObjectSprite(object: object)),
+    );
+  }
+}
+
 class _AcquiredObject extends StatelessWidget {
   const _AcquiredObject({
     required this.placement,
@@ -574,27 +628,40 @@ class _AvatarSprite extends StatelessWidget {
               alignment: Alignment.bottomCenter,
               children: [
                 Positioned.fill(
-                  child:
-                      equipped['top'] == 'avatar_top_01' &&
-                          pose == _AvatarPose.front &&
-                          !moving
+                  child: interactionAnimation != null && !moving
+                      ? _InteractionCell(animation: interactionAnimation!)
+                      : equipped['top'] == 'avatar_top_01' &&
+                            pose == _AvatarPose.front &&
+                            !moving
                       ? Image.asset(
                           'assets/avatars/avatar_blue_top.png',
                           fit: BoxFit.contain,
                           alignment: Alignment.bottomCenter,
                         )
-                      : _MotionCell(pose: pose),
+                      : _MotionCell(
+                          pose: pose,
+                          walkFrame: moving
+                              ? (motion.value * 3).floor().clamp(0, 2)
+                              : 1,
+                          walking: moving,
+                        ),
                 ),
                 if (equipped['hat'] != null)
-                  const Positioned(
-                    top: 5,
-                    child: Text('🧢', style: TextStyle(fontSize: 28)),
+                  Positioned(
+                    top: 1,
+                    child: AvatarRewardItemSprite(
+                      itemId: equipped['hat']!,
+                      size: 42,
+                    ),
                   ),
                 if (equipped['accessory'] != null)
-                  const Positioned(
-                    right: 3,
-                    bottom: 35,
-                    child: Text('🎒', style: TextStyle(fontSize: 25)),
+                  Positioned(
+                    right: 1,
+                    bottom: 30,
+                    child: AvatarRewardItemSprite(
+                      itemId: equipped['accessory']!,
+                      size: 36,
+                    ),
                   ),
                 if (_feedbackIcon(interactionAnimation) case final icon?)
                   Positioned(
@@ -651,12 +718,152 @@ class _AvatarSprite extends StatelessWidget {
   };
 }
 
-class _MotionCell extends StatelessWidget {
-  const _MotionCell({required this.pose});
-  final _AvatarPose pose;
+class _InteractionCell extends StatelessWidget {
+  const _InteractionCell({required this.animation});
+
+  final String animation;
 
   @override
   Widget build(BuildContext context) {
+    final extraIndex = switch (animation) {
+      'wear_shoes' => 0,
+      'prepare_bag' || 'prepare_to_go_out' => 1,
+      'prepare_umbrella' => 2,
+      'wash_hair' || 'take_shower' => 3,
+      'clean' => 4,
+      'organize_books' => 5,
+      'dry' => 6,
+      'wash_hands' => 7,
+      _ => null,
+    };
+    if (extraIndex != null) {
+      return _AtlasCell(
+        asset: 'assets/avatars/avatar_interaction_extra_atlas.png',
+        columns: 4,
+        rows: 2,
+        column: extraIndex % 4,
+        row: extraIndex ~/ 4,
+      );
+    }
+    final index = switch (animation) {
+      'look_in_mirror' => 0,
+      'wash_hands' || 'wash_hair' || 'take_shower' || 'take_bath' => 1,
+      'brush_teeth' => 2,
+      'dry' || 'clean' || 'wipe' => 4,
+      'wear_shirt' || 'wear_pants' || 'wear_shoes' || 'wear_outerwear' => 5,
+      'organize' ||
+      'organize_clothes' ||
+      'organize_dishes' ||
+      'organize_books' ||
+      'organize_shoes' => 6,
+      'eat' => 8,
+      'drink' => 9,
+      'prepare_bag' ||
+      'prepare_bottle' ||
+      'prepare_small_items' ||
+      'prepare_umbrella' ||
+      'prepare_to_go_out' ||
+      'prepare_food' ||
+      'choose_clothes' => 10,
+      'stop_and_look' || 'check_traffic_light' => 11,
+      'ask_for_help' => 12,
+      'rest_on_bed' => 13,
+      'use_toilet' => 14,
+      'flush_toilet' => 15,
+      _ => 7,
+    };
+    final column = index % 4;
+    final row = index ~/ 4;
+    return _AtlasCell(
+      asset: 'assets/avatars/avatar_interaction_atlas.png',
+      columns: 4,
+      rows: 4,
+      column: column,
+      row: row,
+    );
+  }
+}
+
+class _AtlasCell extends StatelessWidget {
+  const _AtlasCell({
+    required this.asset,
+    required this.columns,
+    required this.rows,
+    required this.column,
+    required this.row,
+  });
+
+  final String asset;
+  final int columns;
+  final int rows;
+  final int column;
+  final int row;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) => ClipRect(
+      child: OverflowBox(
+        alignment: Alignment(
+          columns == 1 ? 0 : -1 + column * (2 / (columns - 1)),
+          rows == 1 ? 0 : -1 + row * (2 / (rows - 1)),
+        ),
+        minWidth: box.maxWidth * columns,
+        maxWidth: box.maxWidth * columns,
+        minHeight: box.maxHeight * rows,
+        maxHeight: box.maxHeight * rows,
+        child: Image.asset(
+          asset,
+          width: box.maxWidth * columns,
+          height: box.maxHeight * rows,
+          fit: BoxFit.fill,
+        ),
+      ),
+    ),
+  );
+}
+
+class _MotionCell extends StatelessWidget {
+  const _MotionCell({
+    required this.pose,
+    required this.walkFrame,
+    required this.walking,
+  });
+  final _AvatarPose pose;
+  final int walkFrame;
+  final bool walking;
+
+  @override
+  Widget build(BuildContext context) {
+    if (walking &&
+        (pose == _AvatarPose.front ||
+            pose == _AvatarPose.back ||
+            pose == _AvatarPose.left ||
+            pose == _AvatarPose.right)) {
+      final row = switch (pose) {
+        _AvatarPose.front => 0,
+        _AvatarPose.back => 1,
+        _AvatarPose.left => 2,
+        _AvatarPose.right => 3,
+        _ => 0,
+      };
+      return LayoutBuilder(
+        builder: (context, box) => ClipRect(
+          child: OverflowBox(
+            alignment: Alignment(-1.0 + walkFrame, -1 + row * (2 / 3)),
+            minWidth: box.maxWidth * 3,
+            maxWidth: box.maxWidth * 3,
+            minHeight: box.maxHeight * 4,
+            maxHeight: box.maxHeight * 4,
+            child: Image.asset(
+              'assets/avatars/avatar_walk_atlas.png',
+              width: box.maxWidth * 3,
+              height: box.maxHeight * 4,
+              fit: BoxFit.fill,
+            ),
+          ),
+        ),
+      );
+    }
     final (column, row) = switch (pose) {
       _AvatarPose.front => (0, 0),
       _AvatarPose.back => (1, 0),

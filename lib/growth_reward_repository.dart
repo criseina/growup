@@ -27,6 +27,9 @@ class UnlockableItem {
   final String? spaceId;
   final String interactionAnimation;
   final List<String> relatedActionIds;
+
+  /// One item id resolves to one canonical visual in every space-item UI.
+  String get canonicalAssetId => id;
 }
 
 class GrowthEvent {

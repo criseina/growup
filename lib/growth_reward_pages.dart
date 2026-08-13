@@ -69,15 +69,21 @@ class _AvatarPageState extends State<AvatarPage> {
                   height: 258,
                 ),
                 if (_equipped['hat'] != null)
-                  const Positioned(
+                  Positioned(
                     top: 26,
-                    child: Text('\uD83E\uDDE2', style: TextStyle(fontSize: 42)),
+                    child: AvatarRewardItemSprite(
+                      itemId: _equipped['hat']!,
+                      size: 68,
+                    ),
                   ),
                 if (_equipped['accessory'] != null)
-                  const Positioned(
+                  Positioned(
                     right: 72,
                     bottom: 42,
-                    child: Text('\uD83C\uDF92', style: TextStyle(fontSize: 42)),
+                    child: AvatarRewardItemSprite(
+                      itemId: _equipped['accessory']!,
+                      size: 62,
+                    ),
                   ),
                 Positioned(
                   bottom: 12,
@@ -157,7 +163,13 @@ class _SlotRow extends StatelessWidget {
                     children: items
                         .map(
                           (item) => ChoiceChip(
-                            label: Text('${item.icon} ${item.name}'),
+                            avatar: RewardItemVisual(
+                              itemId: item.id,
+                              fallbackIcon: item.icon,
+                              isSpaceItem: false,
+                              size: 26,
+                            ),
+                            label: Text(item.name),
                             selected: item.id == equippedId,
                             onSelected: (_) => onTap(item),
                           ),
@@ -583,7 +595,11 @@ Future<void> showGrowthCelebration(
 }) => showDialog<void>(
   context: context,
   builder: (dialogContext) => AlertDialog(
-    icon: Text(result.item.icon, style: const TextStyle(fontSize: 50)),
+    icon: RewardItemVisual(
+      itemId: result.item.id,
+      fallbackIcon: result.item.icon,
+      isSpaceItem: result.item.type == UnlockableItemType.spaceItem,
+    ),
     title: const Text('\uD63C\uC790 \uD574\uB0C8\uC5B4\uC694'),
     content: Text(
       '\uCC98\uC74C \uD63C\uC790 \uD55C \uD589\uB3D9\uC744 \uAE30\uB150\uD574\uC694.\n${result.item.name} \uC544\uC774\uD15C\uC744 \uC5BB\uC5C8\uC5B4\uC694.',

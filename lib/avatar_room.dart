@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 enum RoomObjectKind { fixed, acquired }
 
+enum RoomVisualLayer { back, depthSorted, front }
+
 enum RoomInteraction {
   look,
   wash,
@@ -48,6 +50,12 @@ class RoomRect {
       point.x <= left + width &&
       point.y >= top &&
       point.y <= top + height;
+}
+
+class RoomSize {
+  const RoomSize(this.width, this.height);
+  final double width;
+  final double height;
 }
 
 class WalkableArea {
@@ -95,12 +103,16 @@ class RoomObject {
     required this.approachPoint,
     required this.interaction,
     required this.interactionAnimation,
+    this.assetId,
+    this.visualSize = const RoomSize(20, 20),
+    this.depth,
     this.relatedActionIds = const <String>{},
     this.itemId,
     this.collision,
     this.interactionRadius = 13,
     this.hitWidth = 12,
     this.hitHeight = 12,
+    this.visualLayer = RoomVisualLayer.depthSorted,
   });
 
   final String id;
@@ -110,6 +122,10 @@ class RoomObject {
   final RoomPoint approachPoint;
   final RoomInteraction interaction;
   final String interactionAnimation;
+  final String? assetId;
+  final RoomSize visualSize;
+  final double? depth;
+  final RoomVisualLayer visualLayer;
   final Set<String> relatedActionIds;
   final String? itemId;
   final RoomRect? collision;
@@ -119,6 +135,18 @@ class RoomObject {
 
   bool isNear(RoomPoint point) =>
       approachPoint.distanceTo(point) <= interactionRadius;
+
+  String get visualAssetId => assetId ?? id;
+  double get visualDepth => depth ?? position.y;
+  String get objectId => id;
+  String get objectType => kind.name;
+  String get themeId => id.split('_').first;
+  RoomRect get interactionArea => RoomRect(
+    position.x - hitWidth / 2,
+    position.y - hitHeight / 2,
+    hitWidth,
+    hitHeight,
+  );
 }
 
 class DecorationSlot {
@@ -183,7 +211,7 @@ const avatarRooms = <AvatarRoom>[
     id: 'bathroom',
     label: '욕실',
     categoryIds: {'hygiene'},
-    backgroundAsset: 'assets/avatar_backgrounds/bathroom-v2.png',
+    backgroundAsset: 'assets/avatar_layers/backgrounds/bathroom.png',
     backgroundAnchors: ['열린 선반', '수건 걸이대', '문', '타일 벽', '바닥'],
     walkableArea: WalkableArea([
       RoomPoint(10, 61),
@@ -201,6 +229,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(73, 66),
         interaction: RoomInteraction.look,
         interactionAnimation: 'look_in_mirror',
+        visualSize: RoomSize(18, 24),
+        visualLayer: RoomVisualLayer.back,
       ),
       RoomObject(
         id: 'bathroom_sink',
@@ -210,6 +240,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(73, 67),
         interaction: RoomInteraction.wash,
         interactionAnimation: 'wash_hands',
+        visualSize: RoomSize(30, 28),
+        depth: 62,
         relatedActionIds: {'H-01', 'H-04'},
         collision: RoomRect(76, 38, 24, 25),
       ),
@@ -221,6 +253,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(29, 72),
         interaction: RoomInteraction.bathe,
         interactionAnimation: 'take_bath',
+        visualSize: RoomSize(42, 27),
+        depth: 64,
         relatedActionIds: {'H-02', 'H-05', 'H-06'},
         collision: RoomRect(0, 55, 22, 24),
       ),
@@ -232,6 +266,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(29, 72),
         interaction: RoomInteraction.bathe,
         interactionAnimation: 'take_shower',
+        visualSize: RoomSize(15, 30),
+        visualLayer: RoomVisualLayer.back,
         relatedActionIds: {'H-05', 'H-06'},
       ),
     ],
@@ -263,7 +299,7 @@ const avatarRooms = <AvatarRoom>[
     id: 'bedroom',
     label: '침실',
     categoryIds: {'dressing'},
-    backgroundAsset: 'assets/avatar_backgrounds/bedroom-v2.png',
+    backgroundAsset: 'assets/avatar_layers/backgrounds/bedroom.png',
     backgroundAnchors: ['벽 선반', '옷걸이 공간', '바닥 러그', '침대 옆 공간'],
     walkableArea: WalkableArea([
       RoomPoint(7, 59),
@@ -281,6 +317,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(67, 66),
         interaction: RoomInteraction.rest,
         interactionAnimation: 'rest_on_bed',
+        visualSize: RoomSize(43, 29),
+        depth: 61,
         collision: RoomRect(66, 32, 34, 27),
       ),
       RoomObject(
@@ -291,6 +329,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(39, 66),
         interaction: RoomInteraction.look,
         interactionAnimation: 'look_in_mirror',
+        visualSize: RoomSize(18, 34),
+        visualLayer: RoomVisualLayer.back,
       ),
       RoomObject(
         id: 'bedroom_wardrobe',
@@ -300,6 +340,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(28, 66),
         interaction: RoomInteraction.dress,
         interactionAnimation: 'choose_clothes',
+        visualSize: RoomSize(28, 42),
+        depth: 57,
         relatedActionIds: {'C-01', 'C-02', 'C-09', 'C-13'},
         collision: RoomRect(0, 9, 25, 48),
       ),
@@ -311,6 +353,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(53, 66),
         interaction: RoomInteraction.organize,
         interactionAnimation: 'organize_clothes',
+        visualSize: RoomSize(24, 23),
+        depth: 58,
         relatedActionIds: {'C-12'},
         collision: RoomRect(43, 35, 22, 23),
       ),
@@ -350,7 +394,7 @@ const avatarRooms = <AvatarRoom>[
     id: 'kitchen',
     label: '주방',
     categoryIds: {'meals'},
-    backgroundAsset: 'assets/avatar_backgrounds/kitchen-v2.png',
+    backgroundAsset: 'assets/avatar_layers/backgrounds/kitchen.png',
     backgroundAnchors: ['벽 선반', '식기장', '식탁 위', '바닥'],
     walkableArea: WalkableArea([
       RoomPoint(7, 63),
@@ -368,6 +412,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(62, 72),
         interaction: RoomInteraction.eat,
         interactionAnimation: 'eat',
+        visualSize: RoomSize(34, 25),
+        depth: 62,
         relatedActionIds: {'M-01', 'M-02', 'M-03'},
         collision: RoomRect(70, 37, 30, 24),
       ),
@@ -379,6 +425,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(29, 70),
         interaction: RoomInteraction.organize,
         interactionAnimation: 'organize_dishes',
+        visualSize: RoomSize(32, 26),
+        depth: 61,
         relatedActionIds: {'M-04'},
         collision: RoomRect(0, 39, 32, 24),
       ),
@@ -390,6 +438,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(34, 67),
         interaction: RoomInteraction.wash,
         interactionAnimation: 'clean',
+        visualSize: RoomSize(33, 27),
+        depth: 60,
         relatedActionIds: {'M-05', 'B-04'},
         collision: RoomRect(0, 29, 22, 24),
       ),
@@ -401,6 +451,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(43, 66),
         interaction: RoomInteraction.prepare,
         interactionAnimation: 'prepare_food',
+        visualSize: RoomSize(22, 40),
+        depth: 58,
         collision: RoomRect(29, 20, 20, 35),
       ),
     ],
@@ -439,7 +491,7 @@ const avatarRooms = <AvatarRoom>[
     id: 'playroom',
     label: '생활 공간',
     categoryIds: {'belongings_home'},
-    backgroundAsset: 'assets/avatar_backgrounds/playroom.png',
+    backgroundAsset: 'assets/avatar_layers/backgrounds/playroom.png',
     backgroundAnchors: ['낮은 선반', '빈 벽', '바닥 러그', '수납장 옆 공간'],
     walkableArea: WalkableArea([
       RoomPoint(6, 61),
@@ -457,6 +509,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(28, 68),
         interaction: RoomInteraction.organize,
         interactionAnimation: 'organize',
+        visualSize: RoomSize(32, 28),
+        depth: 64,
         relatedActionIds: {'B-01', 'B-02'},
         collision: RoomRect(0, 43, 24, 22),
       ),
@@ -468,6 +522,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(75, 67),
         interaction: RoomInteraction.organize,
         interactionAnimation: 'organize_books',
+        visualSize: RoomSize(25, 40),
+        depth: 62,
         relatedActionIds: {'B-06'},
         collision: RoomRect(79, 25, 21, 38),
       ),
@@ -507,7 +563,7 @@ const avatarRooms = <AvatarRoom>[
     id: 'entrance',
     label: '현관',
     categoryIds: {'outing', 'safety_help'},
-    backgroundAsset: 'assets/avatar_backgrounds/entrance-v2.png',
+    backgroundAsset: 'assets/avatar_layers/backgrounds/entrance.png',
     backgroundAnchors: ['벽걸이', '신발장 위', '우산꽂이', '현관 매트', '바깥 횡단보도'],
     walkableArea: WalkableArea([
       RoomPoint(7, 62),
@@ -525,6 +581,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(31, 69),
         interaction: RoomInteraction.prepare,
         interactionAnimation: 'organize_shoes',
+        visualSize: RoomSize(31, 34),
+        depth: 63,
         relatedActionIds: {'O-01', 'O-02', 'O-03'},
         collision: RoomRect(0, 43, 27, 24),
       ),
@@ -536,6 +594,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(75, 69),
         interaction: RoomInteraction.prepare,
         interactionAnimation: 'prepare_to_go_out',
+        visualSize: RoomSize(19, 49),
+        visualLayer: RoomVisualLayer.back,
         relatedActionIds: {'O-07', 'O-08'},
         collision: RoomRect(83, 15, 17, 47),
       ),
@@ -547,6 +607,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(30, 67),
         interaction: RoomInteraction.dress,
         interactionAnimation: 'wear_outerwear',
+        visualSize: RoomSize(27, 25),
+        visualLayer: RoomVisualLayer.back,
         relatedActionIds: {'O-07', 'O-12'},
       ),
       RoomObject(
@@ -557,6 +619,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(67, 65),
         interaction: RoomInteraction.stop,
         interactionAnimation: 'check_traffic_light',
+        visualSize: RoomSize(17, 34),
+        depth: 58,
         relatedActionIds: {'S-01', 'S-02'},
       ),
       RoomObject(
@@ -567,6 +631,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(68, 65),
         interaction: RoomInteraction.stop,
         interactionAnimation: 'stop_and_look',
+        visualSize: RoomSize(36, 18),
+        depth: 52,
         relatedActionIds: {'S-01', 'S-02'},
       ),
     ],
@@ -633,7 +699,7 @@ const avatarRooms = <AvatarRoom>[
     id: 'toilet',
     label: '화장실',
     categoryIds: {'toilet'},
-    backgroundAsset: 'assets/avatar_backgrounds/toilet.png',
+    backgroundAsset: 'assets/avatar_layers/backgrounds/toilet.png',
     backgroundAnchors: ['열린 선반', '휴지걸이', '수건 걸이대', '문', '바닥'],
     walkableArea: WalkableArea([
       RoomPoint(8, 60),
@@ -651,6 +717,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(34, 66),
         interaction: RoomInteraction.useToilet,
         interactionAnimation: 'use_toilet',
+        visualSize: RoomSize(29, 32),
+        depth: 63,
         relatedActionIds: {'T-01', 'T-02', 'T-03', 'T-04'},
         collision: RoomRect(2, 34, 29, 28),
       ),
@@ -662,6 +730,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(68, 66),
         interaction: RoomInteraction.wash,
         interactionAnimation: 'wash_hands',
+        visualSize: RoomSize(27, 29),
+        depth: 62,
         relatedActionIds: {'T-06'},
         collision: RoomRect(72, 37, 25, 25),
       ),
@@ -673,6 +743,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(35, 66),
         interaction: RoomInteraction.flush,
         interactionAnimation: 'flush_toilet',
+        visualSize: RoomSize(12, 10),
+        visualLayer: RoomVisualLayer.back,
         relatedActionIds: {'T-06'},
         hitWidth: 9,
         hitHeight: 8,
@@ -685,6 +757,8 @@ const avatarRooms = <AvatarRoom>[
         approachPoint: RoomPoint(45, 66),
         interaction: RoomInteraction.pickUp,
         interactionAnimation: 'wipe',
+        visualSize: RoomSize(13, 13),
+        visualLayer: RoomVisualLayer.back,
         relatedActionIds: {'T-05'},
         hitWidth: 10,
         hitHeight: 9,

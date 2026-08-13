@@ -72,6 +72,8 @@ flutter:
     - assets/branding/growup-app-icon.png
     - assets/avatar_backgrounds/
     - assets/avatars/
+    - assets/avatar_layers/backgrounds/
+    - assets/avatar_layers/objects/
 
 flutter_launcher_icons:
   android: true

@@ -198,6 +198,31 @@ void main() {
     );
   });
 
+  test(
+    'avatar world uses independent layered backgrounds and object visuals',
+    () {
+      final backgrounds = avatarRooms
+          .map((room) => room.backgroundAsset)
+          .toSet();
+      expect(backgrounds, hasLength(6));
+      expect(
+        backgrounds.every(
+          (asset) => asset.startsWith('assets/avatar_layers/backgrounds/'),
+        ),
+        isTrue,
+      );
+      for (final room in avatarRooms) {
+        for (final object in room.fixedObjects) {
+          expect(object.visualAssetId, isNotEmpty);
+          expect(object.visualSize.width, greaterThan(0));
+          expect(object.visualSize.height, greaterThan(0));
+          expect(object.visualDepth, inInclusiveRange(0, 100));
+          expect(room.walkableArea.contains(object.approachPoint), isTrue);
+        }
+      }
+    },
+  );
+
   test('toilet rewards stay in the toilet theme', () {
     final toiletItems = avatarRewardItems.where(
       (item) => item.id.startsWith('toilet_'),

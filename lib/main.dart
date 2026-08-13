@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'card_detail_content.dart';
 import 'about_page.dart';
 import 'avatar_world_page.dart';
+import 'avatar_object_sprite.dart';
 import 'growth_reward_pages.dart';
 import 'growth_reward_repository.dart';
 import 'onboarding_page.dart';
@@ -1819,7 +1820,11 @@ Future<void> showParentConfirmedCelebration(
 }) => showDialog<void>(
   context: context,
   builder: (dialogContext) => AlertDialog(
-    icon: Text(result.item.icon, style: const TextStyle(fontSize: 50)),
+    icon: RewardItemVisual(
+      itemId: result.item.id,
+      fallbackIcon: result.item.icon,
+      isSpaceItem: result.item.type == UnlockableItemType.spaceItem,
+    ),
     title: const Text('혼자 해냈어요'),
     content: Text('아이의 노력으로 ${result.item.name} 아이템을 얻었어요.'),
     actions: [
