@@ -34,15 +34,6 @@ class RoomObjectSprite extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (object.visualAssetId == 'entrance_door') {
-      return const _AtlasSprite(
-        asset: 'assets/avatars/avatar_reward_items.png',
-        columns: 4,
-        rows: 2,
-        column: 1,
-        row: 1,
-      );
-    }
     final source = _sources[object.visualAssetId];
     if (source == null) return const SizedBox.shrink();
     // The toilet atlas was generated with a transparent background. Other
@@ -70,40 +61,25 @@ class RoomObjectSprite extends StatelessWidget {
   }
 }
 
-class _AtlasSprite extends StatelessWidget {
-  const _AtlasSprite({
-    required this.asset,
-    required this.columns,
-    required this.rows,
-    required this.column,
-    required this.row,
+class PositionedRoomObject extends StatelessWidget {
+  const PositionedRoomObject({
+    super.key,
+    required this.object,
+    required this.viewportSize,
   });
 
-  final String asset;
-  final int columns;
-  final int rows;
-  final int column;
-  final int row;
+  final RoomObject object;
+  final Size viewportSize;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) => ClipRect(
-      child: OverflowBox(
-        alignment: Alignment(
-          -1 + column * (2 / (columns - 1)),
-          -1 + row * (2 / (rows - 1)),
-        ),
-        minWidth: box.maxWidth * columns,
-        maxWidth: box.maxWidth * columns,
-        minHeight: box.maxHeight * rows,
-        maxHeight: box.maxHeight * rows,
-        child: Image.asset(
-          asset,
-          width: box.maxWidth * columns,
-          height: box.maxHeight * rows,
-          fit: BoxFit.fill,
-        ),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final bounds = object.visualBounds;
+    return Positioned(
+      left: bounds.left * viewportSize.width / 100,
+      top: bounds.top * viewportSize.height / 100,
+      width: bounds.width * viewportSize.width / 100,
+      height: bounds.height * viewportSize.height / 100,
+      child: IgnorePointer(child: RoomObjectSprite(object: object)),
+    );
+  }
 }

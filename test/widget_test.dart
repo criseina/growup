@@ -10,8 +10,10 @@ import 'package:growup/avatar_character_system.dart';
 import 'package:growup/avatar_room.dart';
 import 'package:growup/card_detail_content.dart';
 import 'package:growup/growth_reward_repository.dart';
+import 'package:growup/growth_reward_pages.dart';
 import 'package:growup/main.dart';
 import 'package:growup/profile_repository.dart';
+import 'package:growup/room_object_sprite.dart';
 
 void main() {
   testWidgets('shows onboarding on first launch', (WidgetTester tester) async {
@@ -199,6 +201,38 @@ void main() {
     );
   });
 
+  test('entrance keeps structural door and excludes outdoor fixed objects', () {
+    final entrance = roomById('entrance');
+    final ids = entrance.fixedObjects.map((object) => object.id).toSet();
+    expect(ids, contains('entrance_door'));
+    expect(ids, isNot(contains('entrance_traffic_light')));
+    expect(ids, isNot(contains('entrance_crosswalk')));
+    expect(
+      entrance.fixedObjects
+          .singleWhere((object) => object.id == 'entrance_door')
+          .visualSource,
+      RoomObjectVisualSource.backgroundStructure,
+    );
+  });
+
+  testWidgets('space decoration renders the same fixed room objects', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      const MaterialApp(home: SpacePage(profileId: 'child-a')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(PositionedRoomObject),
+      findsNWidgets(
+        roomById(
+          'bathroom',
+        ).fixedObjects.where((object) => object.shouldRenderAtlas).length,
+      ),
+    );
+  });
+
   test(
     'avatar world uses independent layered backgrounds and object visuals',
     () {
@@ -224,17 +258,35 @@ void main() {
     },
   );
 
-  test('avatar movement speed is exactly 20 percent of the previous speed', () {
-    expect(AvatarMovementSystem.speedMultiplier, .2);
+  test('avatar movement speed is exactly 1.5 times the current speed', () {
+    expect(
+      AvatarMovementSystem.previousJourneyDuration,
+      const Duration(milliseconds: 6000),
+    );
+    expect(AvatarMovementSystem.previousSpeedMultiplier, .2);
+    expect(AvatarMovementSystem.speedIncrease, 1.5);
+    expect(AvatarMovementSystem.speedMultiplier, closeTo(.3, .000001));
     expect(
       AvatarMovementSystem.journeyDuration,
-      const Duration(milliseconds: 6000),
+      const Duration(milliseconds: 4000),
+    );
+    expect(
+      AvatarMovementSystem.previousJourneyDuration.inMilliseconds /
+          AvatarMovementSystem.journeyDuration.inMilliseconds,
+      1.5,
+    );
+    expect(
+      AvatarMovementSystem.walkCycleDuration,
+      const Duration(milliseconds: 800),
     );
     final split = AvatarMovementSystem.durations(const RoomPoint(0, 0), const [
       RoomPoint(10, 0),
       RoomPoint(30, 0),
     ]);
-    expect(split, const [Duration(milliseconds: 2000), Duration(seconds: 4)]);
+    expect(split, const [
+      Duration(milliseconds: 1333),
+      Duration(milliseconds: 2667),
+    ]);
     expect(
       split.fold<int>(0, (sum, duration) => sum + duration.inMilliseconds),
       AvatarMovementSystem.journeyDuration.inMilliseconds,
@@ -243,8 +295,94 @@ void main() {
       AvatarMovementSystem.durations(const RoomPoint(0, 0), const [
         RoomPoint(20, 0),
       ]).single,
-      const Duration(milliseconds: 6000),
+      const Duration(milliseconds: 4000),
     );
+  });
+
+  test('all room backgrounds share the canonical portrait viewport', () {
+    expect(AvatarViewportSystem.designAspectRatio, closeTo(941 / 1672, .0001));
+    for (final available in const [Size(360, 640), Size(800, 400)]) {
+      final viewport = AvatarViewportSystem.contain(available);
+      expect(viewport.width / viewport.height, closeTo(941 / 1672, .0001));
+    }
+  });
+
+  test('walkable clamp keeps the avatar canvas inside the viewport', () {
+    const area = WalkableArea([
+      RoomPoint(0, 0),
+      RoomPoint(100, 0),
+      RoomPoint(100, 100),
+      RoomPoint(0, 100),
+    ]);
+    final left = area.clamp(const RoomPoint(0, 50), const []);
+    final right = area.clamp(const RoomPoint(100, 50), const []);
+    expect(left.x, greaterThanOrEqualTo(WalkableArea.avatarHorizontalMargin));
+    expect(
+      right.x,
+      lessThanOrEqualTo(100 - WalkableArea.avatarHorizontalMargin),
+    );
+  });
+
+  test('fixed object visual bounds stay inside every theme viewport', () {
+    for (final room in avatarRooms) {
+      for (final object in room.fixedObjects.where(
+        (item) => item.shouldRenderAtlas,
+      )) {
+        final bounds = object.visualBounds;
+        expect(bounds.left, greaterThanOrEqualTo(0), reason: object.id);
+        expect(bounds.top, greaterThanOrEqualTo(0), reason: object.id);
+        expect(
+          bounds.left + bounds.width,
+          lessThanOrEqualTo(100),
+          reason: object.id,
+        );
+        expect(
+          bounds.top + bounds.height,
+          lessThanOrEqualTo(100),
+          reason: object.id,
+        );
+      }
+    }
+  });
+
+  test('fixed objects use explicit wall or floor anchors', () {
+    for (final room in avatarRooms) {
+      for (final object in room.fixedObjects) {
+        if (object.visualLayer == RoomVisualLayer.back) {
+          expect(object.anchor, RoomObjectAnchor.wallCenter, reason: object.id);
+        } else if (object.shouldRenderAtlas) {
+          expect(
+            object.anchor,
+            RoomObjectAnchor.floorBottomCenter,
+            reason: object.id,
+          );
+        }
+      }
+    }
+  });
+
+  test('same-layer floor objects do not substantially overlap', () {
+    for (final room in avatarRooms) {
+      final objects = room.fixedObjects
+          .where(
+            (object) =>
+                object.shouldRenderAtlas &&
+                object.anchor == RoomObjectAnchor.floorBottomCenter,
+          )
+          .toList();
+      for (var i = 0; i < objects.length; i++) {
+        for (var j = i + 1; j < objects.length; j++) {
+          final overlap = objects[i].visualBounds.overlapRatio(
+            objects[j].visualBounds,
+          );
+          expect(
+            overlap,
+            lessThan(.2),
+            reason: '${room.id}: ${objects[i].id} / ${objects[j].id}',
+          );
+        }
+      }
+    }
   });
 
   test('avatar directions use one shared four-frame registry', () {
@@ -292,8 +430,12 @@ void main() {
     for (final room in avatarRooms) {
       for (final object in room.fixedObjects) {
         final point = object.resolvedInteractionPoint;
-        expect(room.walkableArea.contains(point), isTrue);
-        expect(room.collisions.any((area) => area.contains(point)), isFalse);
+        expect(room.walkableArea.contains(point), isTrue, reason: object.id);
+        expect(
+          room.collisions.any((area) => area.contains(point)),
+          isFalse,
+          reason: object.id,
+        );
       }
     }
   });

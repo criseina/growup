@@ -410,155 +410,163 @@ class _RoomScene extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final size = Size(constraints.maxWidth, constraints.maxHeight);
-      final foot = position.toScreen(size);
-      final depthScale = .78 + (position.y / 100) * .25;
-      final avatarHeight = 210 * depthScale;
-      final avatarWidth = 126 * depthScale;
-      // 모션 그림 한 칸 아래에 남은 투명 여백을 보정해 보이는 발이
-      // 논리적인 발 좌표와 그림자에 맞닿게 한다.
-      final spriteFootInset =
-          AvatarCharacterMetrics.visibleGroundInset /
-          AvatarCharacterMetrics.frameHeight *
-          avatarHeight;
-      final depthChildren =
-          <({double depth, int order, Widget child})>[
-            for (final object in room.fixedObjects)
-              if (object.visualLayer == RoomVisualLayer.depthSorted)
-                (
-                  depth: object.visualDepth,
-                  order: 0,
-                  child: _FixedObjectVisual(object: object, size: size),
-                ),
-            for (final placement in placements)
-              (
-                depth: placement.y * 100,
-                order: 1,
-                child: _AcquiredObject(
-                  placement: placement,
-                  size: size,
-                  onTap: () => onItemTap(placement),
-                  onLongPress: onItemLongPress,
-                ),
-              ),
-            if (active)
-              (
-                depth: position.y,
-                order: 2,
-                child: AnimatedPositioned(
-                  duration: movementDuration,
-                  curve: Curves.easeInOutCubic,
-                  left: foot.dx - 34 * depthScale,
-                  top: foot.dy - 7,
-                  child: Container(
-                    width: 68 * depthScale,
-                    height: 12 * depthScale,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: .20),
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                  ),
-                ),
-              ),
-            if (active)
-              (
-                depth: position.y,
-                order: 3,
-                child: AnimatedPositioned(
-                  duration: movementDuration,
-                  curve: Curves.easeInOutCubic,
-                  left: (foot.dx - avatarWidth / 2).clamp(
-                    2,
-                    size.width - avatarWidth - 2,
-                  ),
-                  top: (foot.dy - avatarHeight + spriteFootInset).clamp(
-                    4,
-                    size.height - avatarHeight - 12,
-                  ),
-                  child: SizedBox(
-                    width: avatarWidth,
-                    height: avatarHeight,
-                    child: _AvatarSprite(
-                      pose: pose,
-                      moving: moving,
-                      bubble: bubble,
-                      interactionAnimation: interactionAnimation,
-                      motion: motion,
-                      equipped: equipped,
-                      onTap: onAvatarTap,
-                    ),
-                  ),
-                ),
-              ),
-          ]..sort((a, b) {
-            final byDepth = a.depth.compareTo(b.depth);
-            return byDepth == 0 ? a.order.compareTo(b.order) : byDepth;
-          });
-      return Stack(
-        fit: StackFit.expand,
-        clipBehavior: Clip.hardEdge,
-        children: [
-          Image.asset(room.backgroundAsset, fit: BoxFit.cover),
-          for (final object in room.fixedObjects)
-            if (object.visualLayer == RoomVisualLayer.back)
-              _FixedObjectVisual(object: object, size: size),
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTapDown: (details) => onFloorTap(
-                RoomPoint(
-                  details.localPosition.dx / size.width * 100,
-                  details.localPosition.dy / size.height * 100,
-                ),
-              ),
-            ),
+      final available = Size(constraints.maxWidth, constraints.maxHeight);
+      final size = AvatarViewportSystem.contain(available);
+      return ColoredBox(
+        color: const Color(0xfffffbf5),
+        child: Center(
+          child: SizedBox(
+            width: size.width,
+            height: size.height,
+            child: _buildViewport(size),
           ),
-          for (final entry in depthChildren) entry.child,
-          for (final object in room.fixedObjects)
-            if (object.visualLayer == RoomVisualLayer.front)
-              _FixedObjectVisual(object: object, size: size),
-          for (final object in room.fixedObjects)
-            _FixedObjectHotspot(
-              object: object,
-              size: size,
-              onTap: () => onFixedTap(object),
-            ),
-          Positioned(
-            top: 10,
-            left: 12,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .90),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
-                child: Text(
-                  '${room.label}  ${_categoryLabel(room.id)}',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 14,
-            child: Center(
-              child: FilledButton.icon(
-                onPressed: onDecorate,
-                icon: const Icon(Icons.home_outlined),
-                label: const Text('공간 꾸미기'),
-              ),
-            ),
-          ),
-        ],
+        ),
       );
     },
   );
+
+  Widget _buildViewport(Size size) {
+    final foot = position.toScreen(size);
+    final depthScale = .78 + (position.y / 100) * .25;
+    final avatarHeight = 210 * depthScale;
+    final avatarWidth = 126 * depthScale;
+    // 모션 그림 한 칸 아래에 남은 투명 여백을 보정해 보이는 발이
+    // 논리적인 발 좌표와 그림자에 맞닿게 한다.
+    final spriteFootInset =
+        AvatarCharacterMetrics.visibleGroundInset /
+        AvatarCharacterMetrics.frameHeight *
+        avatarHeight;
+    final depthChildren =
+        <({double depth, int order, Widget child})>[
+          for (final object in room.fixedObjects)
+            if (object.shouldRenderAtlas &&
+                object.visualLayer == RoomVisualLayer.depthSorted)
+              (
+                depth: object.visualDepth,
+                order: 0,
+                child: PositionedRoomObject(object: object, viewportSize: size),
+              ),
+          for (final placement in placements)
+            (
+              depth: placement.y * 100,
+              order: 1,
+              child: _AcquiredObject(
+                placement: placement,
+                size: size,
+                onTap: () => onItemTap(placement),
+                onLongPress: onItemLongPress,
+              ),
+            ),
+          if (active)
+            (
+              depth: position.y,
+              order: 2,
+              child: AnimatedPositioned(
+                duration: movementDuration,
+                curve: Curves.easeInOutCubic,
+                left: foot.dx - 34 * depthScale,
+                top: foot.dy - 7,
+                child: Container(
+                  width: 68 * depthScale,
+                  height: 12 * depthScale,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: .20),
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                ),
+              ),
+            ),
+          if (active)
+            (
+              depth: position.y,
+              order: 3,
+              child: AnimatedPositioned(
+                duration: movementDuration,
+                curve: Curves.easeInOutCubic,
+                left: foot.dx - avatarWidth / 2,
+                top: foot.dy - avatarHeight + spriteFootInset,
+                child: SizedBox(
+                  width: avatarWidth,
+                  height: avatarHeight,
+                  child: _AvatarSprite(
+                    pose: pose,
+                    moving: moving,
+                    bubble: bubble,
+                    interactionAnimation: interactionAnimation,
+                    motion: motion,
+                    equipped: equipped,
+                    onTap: onAvatarTap,
+                  ),
+                ),
+              ),
+            ),
+        ]..sort((a, b) {
+          final byDepth = a.depth.compareTo(b.depth);
+          return byDepth == 0 ? a.order.compareTo(b.order) : byDepth;
+        });
+    return Stack(
+      fit: StackFit.expand,
+      clipBehavior: Clip.hardEdge,
+      children: [
+        Image.asset(room.backgroundAsset, fit: BoxFit.fill),
+        for (final object in room.fixedObjects)
+          if (object.shouldRenderAtlas &&
+              object.visualLayer == RoomVisualLayer.back)
+            PositionedRoomObject(object: object, viewportSize: size),
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTapDown: (details) => onFloorTap(
+              RoomPoint(
+                details.localPosition.dx / size.width * 100,
+                details.localPosition.dy / size.height * 100,
+              ),
+            ),
+          ),
+        ),
+        for (final entry in depthChildren) entry.child,
+        for (final object in room.fixedObjects)
+          if (object.shouldRenderAtlas &&
+              object.visualLayer == RoomVisualLayer.front)
+            PositionedRoomObject(object: object, viewportSize: size),
+        for (final object in room.fixedObjects)
+          _FixedObjectHotspot(
+            object: object,
+            size: size,
+            onTap: () => onFixedTap(object),
+          ),
+        Positioned(
+          top: 10,
+          left: 12,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: .90),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              child: Text(
+                '${room.label}  ${_categoryLabel(room.id)}',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 14,
+          child: Center(
+            child: FilledButton.icon(
+              onPressed: onDecorate,
+              icon: const Icon(Icons.home_outlined),
+              label: const Text('공간 꾸미기'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   String _categoryLabel(String roomId) => switch (roomId) {
     'bathroom' => '위생',
@@ -583,13 +591,12 @@ class _FixedObjectHotspot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final point = object.position.toScreen(size);
-    final rect = object.collision;
-    final width = (rect?.width ?? object.hitWidth) * size.width / 100;
-    final height = (rect?.height ?? object.hitHeight) * size.height / 100;
+    final rect = object.interactionArea;
+    final width = rect.width * size.width / 100;
+    final height = rect.height * size.height / 100;
     return Positioned(
-      left: point.dx - width / 2,
-      top: point.dy - height / 2,
+      left: rect.left * size.width / 100,
+      top: rect.top * size.height / 100,
       width: width,
       height: height,
       child: Semantics(
@@ -601,27 +608,6 @@ class _FixedObjectHotspot extends StatelessWidget {
           splashColor: const Color(0x443e9657),
         ),
       ),
-    );
-  }
-}
-
-class _FixedObjectVisual extends StatelessWidget {
-  const _FixedObjectVisual({required this.object, required this.size});
-
-  final RoomObject object;
-  final Size size;
-
-  @override
-  Widget build(BuildContext context) {
-    final point = object.position.toScreen(size);
-    final width = object.visualSize.width * size.width / 100;
-    final height = object.visualSize.height * size.height / 100;
-    return Positioned(
-      left: (point.dx - width / 2).clamp(0, size.width - width),
-      top: (point.dy - height / 2).clamp(0, size.height - height),
-      width: width,
-      height: height,
-      child: IgnorePointer(child: RoomObjectSprite(object: object)),
     );
   }
 }
@@ -641,7 +627,9 @@ class _AcquiredObject extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Positioned(
     left: placement.x * size.width - 31,
-    top: placement.y * size.height - 31,
+    // SpacePlacement stores the object's floor contact point. Acquired
+    // objects therefore use the same bottom-center anchor as floor objects.
+    top: placement.y * size.height - 62,
     child: Semantics(
       button: true,
       label: '획득 아이템과 상호작용',

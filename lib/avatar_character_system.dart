@@ -21,12 +21,14 @@ class AvatarCharacterMetrics {
 class AvatarMovementSystem {
   const AvatarMovementSystem._();
 
-  /// The previous implementation completed every requested journey in 1.2s.
-  /// A 20% speed multiplier means the same journey now takes exactly 6s.
-  static const previousJourneyDuration = Duration(milliseconds: 1200);
-  static const speedMultiplier = 0.2;
-  static const journeyDuration = Duration(milliseconds: 6000);
-  static const walkCycleDuration = Duration(milliseconds: 1200);
+  /// The immediately previous implementation completed a journey in 6s.
+  /// The requested 1.5x speed makes the same journey take exactly 4s.
+  static const previousJourneyDuration = Duration(milliseconds: 6000);
+  static const previousSpeedMultiplier = 0.2;
+  static const speedIncrease = 1.5;
+  static const speedMultiplier = previousSpeedMultiplier * speedIncrease;
+  static const journeyDuration = Duration(milliseconds: 4000);
+  static const walkCycleDuration = Duration(milliseconds: 800);
 
   static List<Duration> durations(RoomPoint from, List<RoomPoint> path) {
     if (path.isEmpty) return const [];
@@ -153,6 +155,21 @@ class AvatarMovementSystem {
       }
     }
     return true;
+  }
+}
+
+class AvatarViewportSystem {
+  const AvatarViewportSystem._();
+
+  static const designWidth = 941.0;
+  static const designHeight = 1672.0;
+  static const designAspectRatio = designWidth / designHeight;
+
+  static Size contain(Size available) {
+    if (available.width / available.height > designAspectRatio) {
+      return Size(available.height * designAspectRatio, available.height);
+    }
+    return Size(available.width, available.width / designAspectRatio);
   }
 }
 

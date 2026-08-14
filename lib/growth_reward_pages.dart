@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'avatar_object_sprite.dart';
+import 'avatar_character_system.dart';
 import 'avatar_room.dart';
 import 'growth_reward_repository.dart';
+import 'room_object_sprite.dart';
 
 class AvatarPage extends StatefulWidget {
   const AvatarPage({super.key, required this.profileId});
@@ -232,7 +234,16 @@ class _SpacePageState extends State<SpacePage> {
   ({double x, double y}) _relative(Offset offset) {
     final render = _stageKey.currentContext!.findRenderObject()! as RenderBox;
     final local = render.globalToLocal(offset);
-    return (x: local.dx / render.size.width, y: local.dy / render.size.height);
+    final viewport = AvatarViewportSystem.contain(render.size);
+    final origin = Offset(
+      (render.size.width - viewport.width) / 2,
+      (render.size.height - viewport.height) / 2,
+    );
+    final viewportPoint = local - origin;
+    return (
+      x: (viewportPoint.dx / viewport.width).clamp(0, 1),
+      y: (viewportPoint.dy / viewport.height).clamp(0, 1),
+    );
   }
 
   Future<void> _accept(Object data, Offset offset) async {
@@ -358,129 +369,177 @@ class _SpacePageState extends State<SpacePage> {
                           width: 3,
                         ),
                       ),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Image.asset(space.backgroundAsset, fit: BoxFit.cover),
-                          if (candidates.isNotEmpty)
-                            for (final slot in space.slots.where(
-                              (slot) =>
-                                  candidates.isEmpty ||
-                                  slot.accepts(
-                                    candidates.first is UnlockableItem
-                                        ? (candidates.first as UnlockableItem)
-                                              .id
-                                        : candidates.first is SpacePlacement
-                                        ? (candidates.first as SpacePlacement)
-                                              .itemId
-                                        : '',
+                      child: Center(
+                        child: SizedBox(
+                          width: AvatarViewportSystem.contain(
+                            Size(constraints.maxWidth, constraints.maxHeight),
+                          ).width,
+                          height: AvatarViewportSystem.contain(
+                            Size(constraints.maxWidth, constraints.maxHeight),
+                          ).height,
+                          child: LayoutBuilder(
+                            builder: (context, viewportConstraints) => Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.asset(
+                                  space.backgroundAsset,
+                                  fit: BoxFit.fill,
+                                ),
+                                for (final object in space.fixedObjects.where(
+                                  (object) => object.shouldRenderAtlas,
+                                ))
+                                  PositionedRoomObject(
+                                    object: object,
+                                    viewportSize: Size(
+                                      viewportConstraints.maxWidth,
+                                      viewportConstraints.maxHeight,
+                                    ),
                                   ),
-                            ))
-                              Positioned(
-                                left:
-                                    slot.position.x /
-                                        100 *
-                                        constraints.maxWidth -
-                                    26,
-                                top:
-                                    slot.position.y /
-                                        100 *
-                                        constraints.maxHeight -
-                                    26,
-                                child: IgnorePointer(
-                                  child: Container(
-                                    width: 52,
-                                    height: 52,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0x553aa75b),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 2,
+                                if (candidates.isNotEmpty)
+                                  for (final slot in space.slots.where(
+                                    (slot) =>
+                                        candidates.isEmpty ||
+                                        slot.accepts(
+                                          candidates.first is UnlockableItem
+                                              ? (candidates.first
+                                                        as UnlockableItem)
+                                                    .id
+                                              : candidates.first
+                                                    is SpacePlacement
+                                              ? (candidates.first
+                                                        as SpacePlacement)
+                                                    .itemId
+                                              : '',
+                                        ),
+                                  ))
+                                    Positioned(
+                                      left:
+                                          slot.position.x /
+                                              100 *
+                                              viewportConstraints.maxWidth -
+                                          26,
+                                      top:
+                                          slot.position.y /
+                                              100 *
+                                              viewportConstraints.maxHeight -
+                                          26,
+                                      child: IgnorePointer(
+                                        child: Container(
+                                          width: 52,
+                                          height: 52,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0x553aa75b),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 2,
+                                            ),
+                                          ),
+                                          child: const Icon(
+                                            Icons.add,
+                                            color: Colors.white,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                    child: const Icon(
-                                      Icons.add,
-                                      color: Colors.white,
+                                for (final placement in _placements)
+                                  Positioned(
+                                    left:
+                                        (placement.x *
+                                                    viewportConstraints
+                                                        .maxWidth -
+                                                29)
+                                            .clamp(
+                                              4,
+                                              viewportConstraints.maxWidth - 62,
+                                            )
+                                            .toDouble(),
+                                    top:
+                                        (placement.y *
+                                                    viewportConstraints
+                                                        .maxHeight -
+                                                58)
+                                            .clamp(
+                                              8,
+                                              viewportConstraints.maxHeight -
+                                                  66,
+                                            )
+                                            .toDouble(),
+                                    child: LongPressDraggable<Object>(
+                                      data: placement,
+                                      feedback: _ItemToken(
+                                        item: _itemFor(placement.itemId),
+                                        highlighted: true,
+                                      ),
+                                      childWhenDragging: const SizedBox(
+                                        width: 52,
+                                        height: 52,
+                                      ),
+                                      child: GestureDetector(
+                                        onTap: () => setState(
+                                          () => _selectedPlacement = placement,
+                                        ),
+                                        child: DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            border:
+                                                _selectedPlacement?.id ==
+                                                    placement.id
+                                                ? Border.all(
+                                                    color: const Color(
+                                                      0xff2f8b4b,
+                                                    ),
+                                                    width: 2,
+                                                  )
+                                                : null,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: AvatarObjectSprite(
+                                            itemId: placement.itemId,
+                                            size: 58,
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                          for (final placement in _placements)
-                            Positioned(
-                              left: (placement.x * constraints.maxWidth - 29)
-                                  .clamp(4, constraints.maxWidth - 62)
-                                  .toDouble(),
-                              top: (placement.y * constraints.maxHeight - 29)
-                                  .clamp(8, constraints.maxHeight - 66)
-                                  .toDouble(),
-                              child: LongPressDraggable<Object>(
-                                data: placement,
-                                feedback: _ItemToken(
-                                  item: _itemFor(placement.itemId),
-                                  highlighted: true,
-                                ),
-                                childWhenDragging: const SizedBox(
-                                  width: 52,
-                                  height: 52,
-                                ),
-                                child: GestureDetector(
-                                  onTap: () => setState(
-                                    () => _selectedPlacement = placement,
+                                if (_selectedPlacement != null)
+                                  Positioned(
+                                    top: 10,
+                                    right: 10,
+                                    child: FilledButton.icon(
+                                      onPressed: _removeSelected,
+                                      icon: const Icon(Icons.delete_outline),
+                                      label: const Text('\uD68C\uC218'),
+                                    ),
                                   ),
+                                Positioned(
+                                  left: 12,
+                                  bottom: 10,
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
-                                      border:
-                                          _selectedPlacement?.id == placement.id
-                                          ? Border.all(
-                                              color: const Color(0xff2f8b4b),
-                                              width: 2,
-                                            )
-                                          : null,
+                                      color: Colors.black54,
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: AvatarObjectSprite(
-                                      itemId: placement.itemId,
-                                      size: 58,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      child: Text(
+                                        '${space.label}  ${_placements.length}\uAC1C',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          if (_selectedPlacement != null)
-                            Positioned(
-                              top: 10,
-                              right: 10,
-                              child: FilledButton.icon(
-                                onPressed: _removeSelected,
-                                icon: const Icon(Icons.delete_outline),
-                                label: const Text('\uD68C\uC218'),
-                              ),
-                            ),
-                          Positioned(
-                            left: 12,
-                            bottom: 10,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                child: Text(
-                                  '${space.label}  ${_placements.length}\uAC1C',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

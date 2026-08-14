@@ -12,6 +12,52 @@ CANVAS = (360, 600)
 GROUND = (180, 580)
 
 
+def keep_largest_subject(cell: Image.Image, alpha_threshold: int = 16) -> Image.Image:
+    """Remove disconnected sprite-sheet bleed without cropping the subject."""
+    alpha = cell.getchannel("A")
+    pixels = alpha.load()
+    width, height = alpha.size
+    visited = set()
+    components = []
+    for y in range(height):
+        for x in range(width):
+            if pixels[x, y] < alpha_threshold or (x, y) in visited:
+                continue
+            stack = [(x, y)]
+            visited.add((x, y))
+            component = []
+            while stack:
+                px, py = stack.pop()
+                component.append((px, py))
+                for nx, ny in (
+                    (px - 1, py),
+                    (px + 1, py),
+                    (px, py - 1),
+                    (px, py + 1),
+                ):
+                    if (
+                        0 <= nx < width
+                        and 0 <= ny < height
+                        and pixels[nx, ny] >= alpha_threshold
+                        and (nx, ny) not in visited
+                    ):
+                        visited.add((nx, ny))
+                        stack.append((nx, ny))
+            components.append(component)
+    if not components:
+        return cell
+    keep = set(max(components, key=len))
+    clean = cell.copy()
+    clean_alpha = clean.getchannel("A")
+    clean_pixels = clean_alpha.load()
+    for y in range(height):
+        for x in range(width):
+            if pixels[x, y] >= alpha_threshold and (x, y) not in keep:
+                clean_pixels[x, y] = 0
+    clean.putalpha(clean_alpha)
+    return clean
+
+
 def normalize(source: str, output: str, columns: int, rows: int, mode: str) -> None:
     image = Image.open(ROOT / source).convert("RGBA")
     atlas = Image.new("RGBA", (CANVAS[0] * columns, CANVAS[1] * rows))
@@ -23,6 +69,8 @@ def normalize(source: str, output: str, columns: int, rows: int, mode: str) -> N
             right = round((column + 1) * image.width / columns)
             bottom = round((source_row + 1) * image.height / rows)
             cell = image.crop((left, top, right, bottom))
+            if mode == "walk":
+                cell = keep_largest_subject(cell)
             if mode == "walk" and row == 3:
                 cell = cell.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
             bounds = cell.getchannel("A").getbbox()
