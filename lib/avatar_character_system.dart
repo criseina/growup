@@ -27,8 +27,9 @@ class AvatarMovementSystem {
   static const previousSpeedMultiplier = 0.2;
   static const speedIncrease = 1.5;
   static const speedMultiplier = previousSpeedMultiplier * speedIncrease;
-  static const journeyDuration = Duration(milliseconds: 4000);
-  static const walkCycleDuration = Duration(milliseconds: 800);
+  static const logicalUnitsPerSecond = 10.0;
+  static const logicalUnitsPerWalkCycle = 7.2;
+  static const walkCycleDuration = Duration(milliseconds: 720);
 
   static List<Duration> durations(RoomPoint from, List<RoomPoint> path) {
     if (path.isEmpty) return const [];
@@ -38,21 +39,16 @@ class AvatarMovementSystem {
       lengths.add(cursor.distanceTo(point));
       cursor = point;
     }
-    final total = lengths.fold<double>(0, (sum, length) => sum + length);
-    if (total == 0) return List.filled(path.length, Duration.zero);
-    var assigned = 0;
-    final result = <Duration>[];
-    for (var index = 0; index < lengths.length; index++) {
-      final milliseconds = index == lengths.length - 1
-          ? journeyDuration.inMilliseconds - assigned
-          : math.max(
+    return lengths
+        .map(
+          (length) => Duration(
+            milliseconds: math.max(
               1,
-              (journeyDuration.inMilliseconds * lengths[index] / total).round(),
-            );
-      result.add(Duration(milliseconds: milliseconds));
-      assigned += milliseconds;
-    }
-    return result;
+              (length / logicalUnitsPerSecond * 1000).round(),
+            ),
+          ),
+        )
+        .toList(growable: false);
   }
 
   static AvatarFacing facing(RoomPoint from, RoomPoint to) {
@@ -156,6 +152,19 @@ class AvatarMovementSystem {
     }
     return true;
   }
+}
+
+class AvatarDepthSystem {
+  const AvatarDepthSystem._();
+
+  /// Normal walking follows floor Y. During a direct interaction the avatar
+  /// remains visible in front of the selected furniture.
+  static double renderDepth({
+    required double floorY,
+    double? interactionObjectDepth,
+  }) => interactionObjectDepth == null
+      ? floorY
+      : math.max(floorY, interactionObjectDepth + .1);
 }
 
 class AvatarViewportSystem {

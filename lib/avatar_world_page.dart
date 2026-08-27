@@ -115,7 +115,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
       from: _position,
       wanted: destination,
       walkableArea: _room.walkableArea,
-      obstacles: _room.collisions,
+      obstacles: _room.navigationCollisions,
     );
     if (path.isEmpty) {
       setState(() {
@@ -397,6 +397,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
         bubble: _bubble,
         interactionAnimation: _activeObject?.interactionAnimation,
         activeObjectId: _activeObject?.id,
+        activeObjectDepth: _activeObject?.visualDepth,
         placements: index == _roomIndex ? _placements : const [],
         roomIndex: index,
         roomCount: avatarRooms.length,
@@ -477,6 +478,7 @@ class _RoomScene extends StatelessWidget {
     required this.bubble,
     required this.interactionAnimation,
     required this.activeObjectId,
+    required this.activeObjectDepth,
     required this.placements,
     required this.roomIndex,
     required this.roomCount,
@@ -501,6 +503,7 @@ class _RoomScene extends StatelessWidget {
   final String? bubble;
   final String? interactionAnimation;
   final String? activeObjectId;
+  final double? activeObjectDepth;
   final List<SpacePlacement> placements;
   final int roomIndex;
   final int roomCount;
@@ -544,6 +547,12 @@ class _RoomScene extends StatelessWidget {
         AvatarCharacterMetrics.visibleGroundInset /
         AvatarCharacterMetrics.frameHeight *
         avatarHeight;
+    // While interacting, keep the child visible in front of the selected
+    // furniture. Navigation collisions handle ordinary walking occlusion.
+    final avatarDepth = AvatarDepthSystem.renderDepth(
+      floorY: position.y,
+      interactionObjectDepth: activeObjectDepth,
+    );
     final depthChildren =
         <({double depth, int order, Widget child})>[
           for (final object in room.fixedObjects)
@@ -567,7 +576,7 @@ class _RoomScene extends StatelessWidget {
             ),
           if (active)
             (
-              depth: position.y,
+              depth: avatarDepth,
               order: 2,
               child: _AnimatedScenePosition(
                 duration: movementDuration,
@@ -585,7 +594,7 @@ class _RoomScene extends StatelessWidget {
             ),
           if (active)
             (
-              depth: position.y,
+              depth: avatarDepth,
               order: 3,
               child: _AnimatedScenePosition(
                 duration: movementDuration,
@@ -690,7 +699,9 @@ class _AnimatedScenePosition extends StatelessWidget {
     child: TweenAnimationBuilder<Offset>(
       tween: Tween<Offset>(end: Offset(left, top)),
       duration: duration,
-      curve: Curves.easeInOutCubic,
+      // A constant world speed keeps the foot cycle synchronized with travel.
+      // Easing each short path segment made the avatar look as if it slid.
+      curve: Curves.linear,
       builder: (context, offset, child) =>
           Transform.translate(offset: offset, child: child),
       child: SizedBox(width: width, height: height, child: child),
@@ -986,8 +997,7 @@ class _AvatarQualitySheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    performance.jankRate <= .05 &&
-                            performance.p90TotalMs <= 24
+                    performance.jankRate <= .05 && performance.p90TotalMs <= 24
                         ? '프레임 안정성 합격 · 큰 끊김 5% 이하, P90 24ms 이하예요.'
                         : '성능 확인 필요 · Profile 빌드에서 큰 끊김 5% 또는 P90 24ms를 넘으면 장면 요소와 애니메이션을 줄여 주세요.',
                     style: const TextStyle(

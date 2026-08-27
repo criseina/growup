@@ -135,7 +135,8 @@ class AvatarQualityEvaluator {
           dimension: 'interaction',
         );
       }
-      if (object.hitWidth < 12 || object.hitHeight < 12) {
+      if (object.interactionArea.width < RoomObject.minimumHitWidth ||
+          object.interactionArea.height < RoomObject.minimumHitHeight) {
         issue(
           'A11Y_SMALL_TARGET',
           '${object.name}의 터치 영역이 작아요.',

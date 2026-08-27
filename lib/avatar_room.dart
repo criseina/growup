@@ -74,6 +74,39 @@ class RoomRect {
       point.x <= left + width &&
       point.y >= top &&
       point.y <= top + height;
+
+  RoomRect inflate(double horizontal, double vertical) => RoomRect(
+    left - horizontal,
+    top - vertical,
+    width + horizontal * 2,
+    height + vertical * 2,
+  );
+
+  RoomRect union(RoomRect other) {
+    final unionLeft = math.min(left, other.left);
+    final unionTop = math.min(top, other.top);
+    final unionRight = math.max(right, other.right);
+    final unionBottom = math.max(bottom, other.bottom);
+    return RoomRect(
+      unionLeft,
+      unionTop,
+      unionRight - unionLeft,
+      unionBottom - unionTop,
+    );
+  }
+
+  RoomRect clampToViewport() {
+    final clampedLeft = left.clamp(0, 100).toDouble();
+    final clampedTop = top.clamp(0, 100).toDouble();
+    final clampedRight = right.clamp(0, 100).toDouble();
+    final clampedBottom = bottom.clamp(0, 100).toDouble();
+    return RoomRect(
+      clampedLeft,
+      clampedTop,
+      math.max(0, clampedRight - clampedLeft),
+      math.max(0, clampedBottom - clampedTop),
+    );
+  }
 }
 
 class RoomSize {
@@ -173,6 +206,9 @@ class RoomObject {
   final double hitWidth;
   final double hitHeight;
 
+  static const minimumHitWidth = 18.0;
+  static const minimumHitHeight = 14.0;
+
   bool isNear(RoomPoint point) =>
       approachPoint.distanceTo(point) <= interactionRadius;
 
@@ -196,14 +232,26 @@ class RoomObject {
       visualSize.height,
     ),
   };
-  RoomRect get interactionArea =>
-      interactionBounds ??
-      RoomRect(
-        position.x - hitWidth / 2,
-        position.y - hitHeight / 2,
-        hitWidth,
-        hitHeight,
-      );
+  RoomRect get interactionArea {
+    final requested =
+        interactionBounds ??
+        RoomRect(
+          position.x - hitWidth / 2,
+          position.y - hitHeight / 2,
+          hitWidth,
+          hitHeight,
+        );
+    final minimum = RoomRect(
+      position.x - math.max(hitWidth, minimumHitWidth) / 2,
+      position.y - math.max(hitHeight, minimumHitHeight) / 2,
+      math.max(hitWidth, minimumHitWidth),
+      math.max(hitHeight, minimumHitHeight),
+    );
+    // A visible object should be tappable across its body, not only through a
+    // small invisible hotspot near the anchor.
+    return requested.union(minimum).union(visualBounds).clampToViewport();
+  }
+
   RoomPoint get resolvedInteractionPoint => interactionPoint ?? approachPoint;
 }
 
@@ -251,6 +299,10 @@ class AvatarRoom {
       .map((object) => object.collision)
       .whereType<RoomRect>()
       .toList();
+
+  List<RoomRect> get navigationCollisions => collisions
+      .map((collision) => collision.inflate(4.5, 2.5))
+      .toList(growable: false);
 
   DecorationSlot? nearestAcceptingSlot(String itemId, RoomPoint wanted) {
     final available = slots.where((slot) => slot.accepts(itemId)).toList();

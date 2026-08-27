@@ -75,6 +75,7 @@ flutter:
     - assets/avatars/normalized/
     - assets/avatar_layers/backgrounds/
     - assets/avatar_layers/objects/
+    - assets/avatar_layers/objects/extracted/
 
 flutter_launcher_icons:
   android: true

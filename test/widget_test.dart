@@ -273,7 +273,7 @@ void main() {
     },
   );
 
-  test('avatar movement speed is exactly 1.5 times the current speed', () {
+  test('avatar movement duration follows distance at a stable walk speed', () {
     expect(
       AvatarMovementSystem.previousJourneyDuration,
       const Duration(milliseconds: 6000),
@@ -281,37 +281,71 @@ void main() {
     expect(AvatarMovementSystem.previousSpeedMultiplier, .2);
     expect(AvatarMovementSystem.speedIncrease, 1.5);
     expect(AvatarMovementSystem.speedMultiplier, closeTo(.3, .000001));
-    expect(
-      AvatarMovementSystem.journeyDuration,
-      const Duration(milliseconds: 4000),
-    );
-    expect(
-      AvatarMovementSystem.previousJourneyDuration.inMilliseconds /
-          AvatarMovementSystem.journeyDuration.inMilliseconds,
-      1.5,
-    );
+    expect(AvatarMovementSystem.logicalUnitsPerSecond, 10);
+    expect(AvatarMovementSystem.logicalUnitsPerWalkCycle, 7.2);
     expect(
       AvatarMovementSystem.walkCycleDuration,
-      const Duration(milliseconds: 800),
+      const Duration(milliseconds: 720),
     );
     final split = AvatarMovementSystem.durations(const RoomPoint(0, 0), const [
       RoomPoint(10, 0),
       RoomPoint(30, 0),
     ]);
     expect(split, const [
-      Duration(milliseconds: 1333),
-      Duration(milliseconds: 2667),
+      Duration(milliseconds: 1000),
+      Duration(milliseconds: 2000),
     ]);
     expect(
       split.fold<int>(0, (sum, duration) => sum + duration.inMilliseconds),
-      AvatarMovementSystem.journeyDuration.inMilliseconds,
+      3000,
     );
     expect(
       AvatarMovementSystem.durations(const RoomPoint(0, 0), const [
         RoomPoint(20, 0),
       ]).single,
-      const Duration(milliseconds: 4000),
+      const Duration(milliseconds: 2000),
     );
+  });
+
+  test(
+    'fixed object hit areas include the visible object and mobile minimum',
+    () {
+      for (final room in avatarRooms) {
+        for (final object in room.fixedObjects) {
+          final hit = object.interactionArea;
+          expect(hit.width, greaterThanOrEqualTo(RoomObject.minimumHitWidth));
+          expect(hit.height, greaterThanOrEqualTo(RoomObject.minimumHitHeight));
+          expect(hit.contains(object.position), isTrue, reason: object.id);
+          expect(
+            hit.overlapRatio(object.visualBounds),
+            greaterThan(.95),
+            reason: object.id,
+          );
+        }
+      }
+    },
+  );
+
+  test('active interaction keeps the avatar above the selected object', () {
+    expect(
+      AvatarDepthSystem.renderDepth(floorY: 62, interactionObjectDepth: 80),
+      greaterThan(80),
+    );
+    expect(AvatarDepthSystem.renderDepth(floorY: 72), 72);
+  });
+
+  test('navigation collision adds body clearance around furniture', () {
+    for (final room in avatarRooms) {
+      expect(room.navigationCollisions.length, room.collisions.length);
+      for (var index = 0; index < room.collisions.length; index++) {
+        final visual = room.collisions[index];
+        final navigation = room.navigationCollisions[index];
+        expect(navigation.left, lessThan(visual.left));
+        expect(navigation.top, lessThan(visual.top));
+        expect(navigation.right, greaterThan(visual.right));
+        expect(navigation.bottom, greaterThan(visual.bottom));
+      }
+    }
   });
 
   test('all room backgrounds share the canonical portrait viewport', () {
