@@ -154,19 +154,6 @@ class AvatarMovementSystem {
   }
 }
 
-class AvatarDepthSystem {
-  const AvatarDepthSystem._();
-
-  /// Normal walking follows floor Y. During a direct interaction the avatar
-  /// remains visible in front of the selected furniture.
-  static double renderDepth({
-    required double floorY,
-    double? interactionObjectDepth,
-  }) => interactionObjectDepth == null
-      ? floorY
-      : math.max(floorY, interactionObjectDepth + .1);
-}
-
 class AvatarViewportSystem {
   const AvatarViewportSystem._();
 

@@ -326,14 +326,6 @@ void main() {
     },
   );
 
-  test('active interaction keeps the avatar above the selected object', () {
-    expect(
-      AvatarDepthSystem.renderDepth(floorY: 62, interactionObjectDepth: 80),
-      greaterThan(80),
-    );
-    expect(AvatarDepthSystem.renderDepth(floorY: 72), 72);
-  });
-
   test('navigation collision adds body clearance around furniture', () {
     for (final room in avatarRooms) {
       expect(room.navigationCollisions.length, room.collisions.length);

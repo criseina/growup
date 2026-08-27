@@ -161,7 +161,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
           ? '방을 천천히 둘러보는 중'
           : '${interactionTarget.name} 쪽으로 가는 중';
     });
-    _arrivalTimer = Timer(duration, () {
+    _arrivalTimer = Timer(duration + const Duration(milliseconds: 100), () {
       if (!mounted || serial != _movementSerial) return;
       final remaining = path.skip(1).toList();
       if (remaining.isNotEmpty) {
@@ -396,8 +396,6 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
         movementDuration: _movementDuration,
         bubble: _bubble,
         interactionAnimation: _activeObject?.interactionAnimation,
-        activeObjectId: _activeObject?.id,
-        activeObjectDepth: _activeObject?.visualDepth,
         placements: index == _roomIndex ? _placements : const [],
         roomIndex: index,
         roomCount: avatarRooms.length,
@@ -477,8 +475,6 @@ class _RoomScene extends StatelessWidget {
     required this.movementDuration,
     required this.bubble,
     required this.interactionAnimation,
-    required this.activeObjectId,
-    required this.activeObjectDepth,
     required this.placements,
     required this.roomIndex,
     required this.roomCount,
@@ -502,8 +498,6 @@ class _RoomScene extends StatelessWidget {
   final Duration movementDuration;
   final String? bubble;
   final String? interactionAnimation;
-  final String? activeObjectId;
-  final double? activeObjectDepth;
   final List<SpacePlacement> placements;
   final int roomIndex;
   final int roomCount;
@@ -547,22 +541,10 @@ class _RoomScene extends StatelessWidget {
         AvatarCharacterMetrics.visibleGroundInset /
         AvatarCharacterMetrics.frameHeight *
         avatarHeight;
-    // While interacting, keep the child visible in front of the selected
-    // furniture. Navigation collisions handle ordinary walking occlusion.
-    final avatarDepth = AvatarDepthSystem.renderDepth(
-      floorY: position.y,
-      interactionObjectDepth: activeObjectDepth,
-    );
+    // Fixed furniture is painted below this list. The avatar therefore stays
+    // visible in front of every base object while walking and interacting.
     final depthChildren =
         <({double depth, int order, Widget child})>[
-          for (final object in room.fixedObjects)
-            if (object.shouldRenderAtlas &&
-                object.visualLayer == RoomVisualLayer.depthSorted)
-              (
-                depth: object.visualDepth,
-                order: 0,
-                child: PositionedRoomObject(object: object, viewportSize: size),
-              ),
           for (final placement in placements)
             (
               depth: placement.y * 100,
@@ -576,9 +558,10 @@ class _RoomScene extends StatelessWidget {
             ),
           if (active)
             (
-              depth: avatarDepth,
+              depth: position.y,
               order: 2,
               child: _AnimatedScenePosition(
+                key: const ValueKey('avatar-shadow-position'),
                 duration: movementDuration,
                 left: foot.dx - 34 * depthScale,
                 top: foot.dy - 7,
@@ -594,9 +577,10 @@ class _RoomScene extends StatelessWidget {
             ),
           if (active)
             (
-              depth: avatarDepth,
+              depth: position.y,
               order: 3,
               child: _AnimatedScenePosition(
+                key: const ValueKey('avatar-sprite-position'),
                 duration: movementDuration,
                 left: foot.dx - avatarWidth / 2,
                 top: foot.dy - avatarHeight + spriteFootInset,
@@ -623,8 +607,7 @@ class _RoomScene extends StatelessWidget {
       children: [
         Image.asset(room.backgroundAsset, fit: BoxFit.fill),
         for (final object in room.fixedObjects)
-          if (object.shouldRenderAtlas &&
-              object.visualLayer == RoomVisualLayer.back)
+          if (object.shouldRenderAtlas)
             PositionedRoomObject(object: object, viewportSize: size),
         Positioned.fill(
           child: GestureDetector(
@@ -639,14 +622,9 @@ class _RoomScene extends StatelessWidget {
         ),
         for (final entry in depthChildren) entry.child,
         for (final object in room.fixedObjects)
-          if (object.shouldRenderAtlas &&
-              object.visualLayer == RoomVisualLayer.front)
-            PositionedRoomObject(object: object, viewportSize: size),
-        for (final object in room.fixedObjects)
           _FixedObjectHotspot(
             object: object,
             size: size,
-            active: object.id == activeObjectId,
             onTap: () => onFixedTap(object),
           ),
         Positioned(
@@ -677,6 +655,7 @@ class _RoomScene extends StatelessWidget {
 
 class _AnimatedScenePosition extends StatelessWidget {
   const _AnimatedScenePosition({
+    super.key,
     required this.left,
     required this.top,
     required this.width,
@@ -1085,12 +1064,10 @@ class _FixedObjectHotspot extends StatelessWidget {
   const _FixedObjectHotspot({
     required this.object,
     required this.size,
-    required this.active,
     required this.onTap,
   });
   final RoomObject object;
   final Size size;
-  final bool active;
   final VoidCallback onTap;
 
   @override
@@ -1106,19 +1083,13 @@ class _FixedObjectHotspot extends StatelessWidget {
       child: Semantics(
         button: true,
         label: '${object.name}과 상호작용',
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 240),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: active
-                ? Border.all(color: const Color(0xff57a66a), width: 2)
-                : null,
-            color: active ? const Color(0x2257a66a) : Colors.transparent,
-          ),
+        child: Material(
+          type: MaterialType.transparency,
           child: InkWell(
             onTap: onTap,
             borderRadius: BorderRadius.circular(16),
-            splashColor: const Color(0x443e9657),
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
           ),
         ),
       ),

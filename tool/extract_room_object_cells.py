@@ -7,13 +7,14 @@ preserving the original pixels and aspect ratio.
 """
 
 from pathlib import Path
-
+import numpy as np
 from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "assets" / "avatar_layers" / "objects"
 OUTPUT = SOURCE / "extracted"
+GENERATED_FURNITURE = SOURCE / "generated_furniture_v2.png"
 
 CELLS = {
     "bathroom": {
@@ -52,6 +53,46 @@ CELLS = {
     },
 }
 
+GENERATED_QUADRANTS = {
+    "kitchen_fridge": (0, 0),
+    "kitchen_sink": (1, 0),
+    "kitchen_table": (0, 1),
+    "bedroom_wardrobe": (1, 1),
+}
+
+
+def extract_generated_furniture() -> None:
+    if not GENERATED_FURNITURE.exists():
+        return
+    sheet = Image.open(GENERATED_FURNITURE).convert("RGB")
+    cell_width = sheet.width // 2
+    cell_height = sheet.height // 2
+    for object_id, (column, row) in GENERATED_QUADRANTS.items():
+        cell = sheet.crop(
+            (
+                column * cell_width,
+                row * cell_height,
+                (column + 1) * cell_width,
+                (row + 1) * cell_height,
+            )
+        )
+        rgb = np.array(cell, dtype=np.uint8)
+        difference_from_white = 255 - rgb.min(axis=2)
+        alpha = np.clip((difference_from_white.astype(np.int16) - 3) * 18, 0, 255)
+        alpha = alpha.astype(np.uint8)
+        bounds = Image.fromarray(alpha).getbbox()
+        if bounds is None:
+            raise RuntimeError(f"{object_id} generated cell has no visible pixels")
+        rgba = np.dstack((rgb, alpha))
+        cutout = Image.fromarray(rgba, mode="RGBA").crop(bounds)
+        padding = max(3, round(max(cutout.size) * 0.012))
+        result = Image.new(
+            "RGBA",
+            (cutout.width + padding * 2, cutout.height + padding * 2),
+        )
+        result.alpha_composite(cutout, (padding, padding))
+        result.save(OUTPUT / f"{object_id}.png", optimize=True)
+
 
 def extract() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -85,6 +126,7 @@ def extract() -> None:
             )
             result.alpha_composite(visible, (padding, padding))
             result.save(OUTPUT / f"{object_id}.png", optimize=True)
+    extract_generated_furniture()
 
 
 if __name__ == "__main__":
