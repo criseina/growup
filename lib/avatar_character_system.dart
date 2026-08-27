@@ -210,25 +210,30 @@ class AvatarAtlasCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) => ClipRect(
-      child: OverflowBox(
-        alignment: Alignment(
-          columns == 1 ? 0 : -1 + column * (2 / (columns - 1)),
-          rows == 1 ? 0 : -1 + row * (2 / (rows - 1)),
+    builder: (context, box) {
+      final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+      return ClipRect(
+        child: OverflowBox(
+          alignment: Alignment(
+            columns == 1 ? 0 : -1 + column * (2 / (columns - 1)),
+            rows == 1 ? 0 : -1 + row * (2 / (rows - 1)),
+          ),
+          minWidth: box.maxWidth * columns,
+          maxWidth: box.maxWidth * columns,
+          minHeight: box.maxHeight * rows,
+          maxHeight: box.maxHeight * rows,
+          child: Image.asset(
+            asset,
+            width: box.maxWidth * columns,
+            height: box.maxHeight * rows,
+            cacheWidth: (box.maxWidth * columns * pixelRatio).ceil(),
+            cacheHeight: (box.maxHeight * rows * pixelRatio).ceil(),
+            fit: BoxFit.fill,
+            alignment: AvatarCharacterMetrics.groundAnchor,
+            filterQuality: FilterQuality.low,
+          ),
         ),
-        minWidth: box.maxWidth * columns,
-        maxWidth: box.maxWidth * columns,
-        minHeight: box.maxHeight * rows,
-        maxHeight: box.maxHeight * rows,
-        child: Image.asset(
-          asset,
-          width: box.maxWidth * columns,
-          height: box.maxHeight * rows,
-          fit: BoxFit.fill,
-          alignment: AvatarCharacterMetrics.groundAnchor,
-          filterQuality: FilterQuality.medium,
-        ),
-      ),
-    ),
+      );
+    },
   );
 }

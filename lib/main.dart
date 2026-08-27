@@ -487,7 +487,7 @@ class _TodayRecommendation extends StatelessWidget {
       // The illustration grows into otherwise unused card space, but is capped so
       // it can never push the copy outside the recommendation card.
       final illustrationHeight = (constraints.maxHeight - 158)
-          .clamp(180.0, 310.0)
+          .clamp(130.0, 310.0)
           .toDouble();
 
       return Card(

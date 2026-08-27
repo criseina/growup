@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:growup/avatar_reward_catalog.dart';
 import 'package:growup/avatar_character_system.dart';
+import 'package:growup/avatar_quality.dart';
 import 'package:growup/avatar_room.dart';
 import 'package:growup/card_detail_content.dart';
 import 'package:growup/growth_reward_repository.dart';
@@ -169,6 +170,20 @@ void main() {
         isTrue,
         reason: '${room.label} 배치 물건의 접근 지점이 바닥 밖에 있습니다.',
       );
+    }
+  });
+
+  test('avatar QC loop keeps every room above the release threshold', () {
+    final reports = AvatarQualityEvaluator.evaluateAll(avatarRooms);
+
+    expect(reports, hasLength(6));
+    for (final report in reports) {
+      expect(
+        report.issues.where((issue) => issue.level == AvatarQualityLevel.fail),
+        isEmpty,
+        reason: '${report.roomId}: ${report.issues.map((issue) => issue.code)}',
+      );
+      expect(report.overall, greaterThanOrEqualTo(75), reason: report.roomId);
     }
   });
 

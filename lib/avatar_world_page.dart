@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'avatar_character_system.dart';
 import 'avatar_object_sprite.dart';
+import 'avatar_quality.dart';
 import 'avatar_room.dart';
 import 'growth_reward_pages.dart';
 import 'growth_reward_repository.dart';
@@ -26,6 +28,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
   final _repository = GrowthRewardRepository();
   final _pageController = PageController();
   final _random = Random();
+  final _performanceMonitor = AvatarPerformanceMonitor();
   late final AnimationController _motion = AnimationController(
     vsync: this,
     duration: AvatarMovementSystem.walkCycleDuration,
@@ -44,12 +47,15 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
   RoomObject? _activeObject;
   List<SpacePlacement> _placements = [];
   Map<String, String> _equipped = {};
+  final List<String> _recentAutonomy = [];
+  String _activityLabel = '무엇을 해볼지 둘러보는 중';
 
   AvatarRoom get _room => avatarRooms[_roomIndex];
 
   @override
   void initState() {
     super.initState();
+    _performanceMonitor.start();
     _loadRoom();
     _scheduleAutonomy();
   }
@@ -74,12 +80,18 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
     _autonomyTimer = Timer(Duration(seconds: 4 + _random.nextInt(4)), () {
       if (!mounted) return;
       if (!_moving && _activeObject == null) {
-        if (_placements.isNotEmpty && _random.nextBool()) {
-          final placement = _placements[_random.nextInt(_placements.length)];
+        final freshPlacements = _placements
+            .where((placement) => !_recentAutonomy.contains(placement.id))
+            .toList();
+        final freshObjects = _room.fixedObjects
+            .where((object) => !_recentAutonomy.contains(object.id))
+            .toList();
+        if (freshPlacements.isNotEmpty && _random.nextBool()) {
+          final placement =
+              freshPlacements[_random.nextInt(freshPlacements.length)];
           _approachAcquired(placement);
-        } else if (_random.nextInt(4) == 0) {
-          final object =
-              _room.fixedObjects[_random.nextInt(_room.fixedObjects.length)];
+        } else if (freshObjects.isNotEmpty && _random.nextInt(4) == 0) {
+          final object = freshObjects[_random.nextInt(freshObjects.length)];
           _approachFixed(object);
         } else {
           _moveTo(
@@ -113,6 +125,9 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
         _bubble = interactionTarget == null
             ? null
             : '${interactionTarget.name} 앞에는 지금 갈 수 없어요';
+        _activityLabel = interactionTarget == null
+            ? '잠깐 쉬고 있어요'
+            : '${interactionTarget.name} 가까이 갈 수 없어요';
       });
       return;
     }
@@ -142,6 +157,9 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
       _moving = true;
       _bubble = null;
       _activeObject = null;
+      _activityLabel = interactionTarget == null
+          ? '방을 천천히 둘러보는 중'
+          : '${interactionTarget.name} 쪽으로 가는 중';
     });
     _arrivalTimer = Timer(duration, () {
       if (!mounted || serial != _movementSerial) return;
@@ -164,6 +182,9 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
         _bubble = interactionTarget == null
             ? null
             : '${interactionTarget.name}${_interactionCopy(interactionTarget.interaction)}';
+        _activityLabel = interactionTarget == null
+            ? '새로운 것을 찾는 중'
+            : '${interactionTarget.name}${_interactionCopy(interactionTarget.interaction)}';
       });
       if (interactionTarget != null) {
         _interactionTimer = Timer(interactionTarget.interactionDuration, () {
@@ -172,6 +193,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
             _pose = _AvatarPose.front;
             _activeObject = null;
             _bubble = null;
+            _activityLabel = '다음 행동을 생각하는 중';
           });
         });
       }
@@ -211,14 +233,17 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
     RoomInteraction.flush => '을 눌러 물을 내려요',
   };
 
-  void _approachFixed(RoomObject object) =>
-      _moveTo(object.approachPoint, interactionTarget: object);
+  void _approachFixed(RoomObject object) {
+    _rememberAutonomy(object.id);
+    _moveTo(object.approachPoint, interactionTarget: object);
+  }
 
   void _approachAcquired(SpacePlacement placement) {
     final item = GrowthRewardRepository.items
         .where((candidate) => candidate.id == placement.itemId)
         .firstOrNull;
     if (item == null || item.spaceId != _room.id) return;
+    _rememberAutonomy(placement.id);
     final placementPoint = RoomPoint(placement.x * 100, placement.y * 100);
     final slot = _room.nearestAcceptingSlot(item.id, placementPoint);
     final object = RoomObject(
@@ -239,6 +264,14 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
       relatedActionIds: item.relatedActionIds.toSet(),
     );
     _moveTo(object.approachPoint, interactionTarget: object);
+  }
+
+  void _rememberAutonomy(String id) {
+    _recentAutonomy.remove(id);
+    _recentAutonomy.add(id);
+    while (_recentAutonomy.length > 2) {
+      _recentAutonomy.removeAt(0);
+    }
   }
 
   RoomInteraction _interactionForAnimation(String animation) =>
@@ -271,6 +304,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
       _moving = false;
       _pose = _AvatarPose.wave;
       _bubble = '안녕! 같이 둘러볼까?';
+      _activityLabel = '반갑게 인사하는 중';
     });
     _interactionTimer?.cancel();
     _interactionTimer = Timer(const Duration(milliseconds: 1700), () {
@@ -278,6 +312,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
       setState(() {
         _pose = _AvatarPose.front;
         _bubble = null;
+        _activityLabel = '무엇을 해볼지 둘러보는 중';
       });
     });
   }
@@ -287,6 +322,7 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
     _autonomyTimer?.cancel();
     _arrivalTimer?.cancel();
     _interactionTimer?.cancel();
+    _performanceMonitor.stop();
     _motion.dispose();
     _pageController.dispose();
     super.dispose();
@@ -295,8 +331,31 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: Text('${_room.label}에서 놀아요'),
+      toolbarHeight: 66,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '나의 성장 공간',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          Text(
+            '${_room.label} · ${_categoryLabel(_room.id)}',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xff52705c),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
       actions: [
+        if (kDebugMode || avatarQcEnabled)
+          IconButton(
+            icon: const Icon(Icons.verified_outlined),
+            tooltip: '아바타 공간 QC',
+            onPressed: _openQualityPanel,
+          ),
         IconButton(
           icon: const Icon(Icons.checkroom_outlined),
           tooltip: '아바타 꾸미기',
@@ -323,6 +382,8 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
           _moving = false;
           _bubble = null;
           _activeObject = null;
+          _activityLabel = '새 공간을 둘러보는 중';
+          _recentAutonomy.clear();
         });
         _loadRoom();
       },
@@ -335,7 +396,11 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
         movementDuration: _movementDuration,
         bubble: _bubble,
         interactionAnimation: _activeObject?.interactionAnimation,
+        activeObjectId: _activeObject?.id,
         placements: index == _roomIndex ? _placements : const [],
+        roomIndex: index,
+        roomCount: avatarRooms.length,
+        activityLabel: _activityLabel,
         motion: _motion,
         equipped: _equipped,
         onFloorTap: (point) => _moveTo(point),
@@ -344,6 +409,11 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
         onItemLongPress: () => _openDecoration(),
         onAvatarTap: _reactToAvatar,
         onDecorate: _openDecoration,
+        onSelectRoom: (roomIndex) => _pageController.animateToPage(
+          roomIndex,
+          duration: const Duration(milliseconds: 360),
+          curve: Curves.easeOutCubic,
+        ),
       ),
     ),
     bottomNavigationBar: _AvatarNavigation(
@@ -362,10 +432,38 @@ class _AvatarWorldPageState extends State<AvatarWorldPage>
       )
       .then((_) => _loadRoom());
 
+  void _openQualityPanel() {
+    final reports = AvatarQualityEvaluator.evaluateAll(avatarRooms);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _AvatarQualitySheet(
+        currentRoom: _room,
+        reports: reports,
+        performance: _performanceMonitor.snapshot,
+        onResetPerformance: () {
+          _performanceMonitor.reset();
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+
   void _go(Widget page) => Navigator.of(context).pushAndRemoveUntil(
     MaterialPageRoute(builder: (_) => page),
     (route) => false,
   );
+
+  String _categoryLabel(String roomId) => switch (roomId) {
+    'bathroom' => '위생',
+    'bedroom' => '옷 입기',
+    'kitchen' => '식사',
+    'playroom' => '물건과 집안일',
+    'entrance' => '외출 준비 · 안전',
+    'toilet' => '화장실',
+    _ => '',
+  };
 }
 
 class _RoomScene extends StatelessWidget {
@@ -378,7 +476,11 @@ class _RoomScene extends StatelessWidget {
     required this.movementDuration,
     required this.bubble,
     required this.interactionAnimation,
+    required this.activeObjectId,
     required this.placements,
+    required this.roomIndex,
+    required this.roomCount,
+    required this.activityLabel,
     required this.motion,
     required this.equipped,
     required this.onFloorTap,
@@ -387,6 +489,7 @@ class _RoomScene extends StatelessWidget {
     required this.onItemLongPress,
     required this.onAvatarTap,
     required this.onDecorate,
+    required this.onSelectRoom,
   });
 
   final AvatarRoom room;
@@ -397,7 +500,11 @@ class _RoomScene extends StatelessWidget {
   final Duration movementDuration;
   final String? bubble;
   final String? interactionAnimation;
+  final String? activeObjectId;
   final List<SpacePlacement> placements;
+  final int roomIndex;
+  final int roomCount;
+  final String activityLabel;
   final Animation<double> motion;
   final Map<String, String> equipped;
   final ValueChanged<RoomPoint> onFloorTap;
@@ -406,6 +513,7 @@ class _RoomScene extends StatelessWidget {
   final VoidCallback onItemLongPress;
   final VoidCallback onAvatarTap;
   final VoidCallback onDecorate;
+  final ValueChanged<int> onSelectRoom;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -461,14 +569,13 @@ class _RoomScene extends StatelessWidget {
             (
               depth: position.y,
               order: 2,
-              child: AnimatedPositioned(
+              child: _AnimatedScenePosition(
                 duration: movementDuration,
-                curve: Curves.easeInOutCubic,
                 left: foot.dx - 34 * depthScale,
                 top: foot.dy - 7,
-                child: Container(
-                  width: 68 * depthScale,
-                  height: 12 * depthScale,
+                width: 68 * depthScale,
+                height: 12 * depthScale,
+                child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: .20),
                     borderRadius: BorderRadius.circular(50),
@@ -480,23 +587,20 @@ class _RoomScene extends StatelessWidget {
             (
               depth: position.y,
               order: 3,
-              child: AnimatedPositioned(
+              child: _AnimatedScenePosition(
                 duration: movementDuration,
-                curve: Curves.easeInOutCubic,
                 left: foot.dx - avatarWidth / 2,
                 top: foot.dy - avatarHeight + spriteFootInset,
-                child: SizedBox(
-                  width: avatarWidth,
-                  height: avatarHeight,
-                  child: _AvatarSprite(
-                    pose: pose,
-                    moving: moving,
-                    bubble: bubble,
-                    interactionAnimation: interactionAnimation,
-                    motion: motion,
-                    equipped: equipped,
-                    onTap: onAvatarTap,
-                  ),
+                width: avatarWidth,
+                height: avatarHeight,
+                child: _AvatarSprite(
+                  pose: pose,
+                  moving: moving,
+                  bubble: bubble,
+                  interactionAnimation: interactionAnimation,
+                  motion: motion,
+                  equipped: equipped,
+                  onTap: onAvatarTap,
                 ),
               ),
             ),
@@ -533,60 +637,450 @@ class _RoomScene extends StatelessWidget {
           _FixedObjectHotspot(
             object: object,
             size: size,
+            active: object.id == activeObjectId,
             onTap: () => onFixedTap(object),
           ),
         Positioned(
           top: 10,
           left: 12,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .90),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              child: Text(
-                '${room.label}  ${_categoryLabel(room.id)}',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
+          right: 12,
+          child: _RoomStatusCard(
+            room: room,
+            activityLabel: activityLabel,
+            placedCount: placements.length,
           ),
         ),
         Positioned(
-          left: 0,
-          right: 0,
-          bottom: 14,
-          child: Center(
-            child: FilledButton.icon(
-              onPressed: onDecorate,
-              icon: const Icon(Icons.home_outlined),
-              label: const Text('공간 꾸미기'),
-            ),
+          left: 12,
+          right: 12,
+          bottom: 12,
+          child: _RoomDock(
+            currentIndex: roomIndex,
+            roomCount: roomCount,
+            onSelectRoom: onSelectRoom,
+            onDecorate: onDecorate,
           ),
         ),
       ],
     );
   }
+}
 
-  String _categoryLabel(String roomId) => switch (roomId) {
-    'bathroom' => '위생',
-    'bedroom' => '옷 입기',
-    'kitchen' => '식사',
-    'playroom' => '물건과 집안일',
-    'entrance' => '외출 준비 · 안전',
-    'toilet' => '화장실',
-    _ => '',
+class _AnimatedScenePosition extends StatelessWidget {
+  const _AnimatedScenePosition({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+    required this.duration,
+    required this.child,
+  });
+
+  final double left;
+  final double top;
+  final double width;
+  final double height;
+  final Duration duration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Positioned(
+    left: 0,
+    top: 0,
+    child: TweenAnimationBuilder<Offset>(
+      tween: Tween<Offset>(end: Offset(left, top)),
+      duration: duration,
+      curve: Curves.easeInOutCubic,
+      builder: (context, offset, child) =>
+          Transform.translate(offset: offset, child: child),
+      child: SizedBox(width: width, height: height, child: child),
+    ),
+  );
+}
+
+class _RoomStatusCard extends StatelessWidget {
+  const _RoomStatusCard({
+    required this.room,
+    required this.activityLabel,
+    required this.placedCount,
+  });
+
+  final AvatarRoom room;
+  final String activityLabel;
+  final int placedCount;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    label: '${room.label}, $activityLabel, 배치한 성장 물건 $placedCount개',
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xfff9fff5).withValues(alpha: .94),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x3353945e)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x18000000),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                color: Color(0xffe2f4dc),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _roomIcon(room.id),
+                size: 18,
+                color: const Color(0xff247342),
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    activityLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xff244c31),
+                    ),
+                  ),
+                  const Text(
+                    '물건을 누르면 가까이 가서 행동해요',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 9, color: Color(0xff607367)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 5),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xffffefbd),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '★ $placedCount',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xff805f13),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  IconData _roomIcon(String roomId) => switch (roomId) {
+    'bathroom' => Icons.water_drop_outlined,
+    'bedroom' => Icons.bed_outlined,
+    'kitchen' => Icons.restaurant_outlined,
+    'playroom' => Icons.toys_outlined,
+    'entrance' => Icons.directions_walk_rounded,
+    'toilet' => Icons.wc_outlined,
+    _ => Icons.home_outlined,
   };
+}
+
+class _RoomDock extends StatelessWidget {
+  const _RoomDock({
+    required this.currentIndex,
+    required this.roomCount,
+    required this.onSelectRoom,
+    required this.onDecorate,
+  });
+
+  final int currentIndex;
+  final int roomCount;
+  final ValueChanged<int> onSelectRoom;
+  final VoidCallback onDecorate;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xff173f2a).withValues(alpha: .91),
+      borderRadius: BorderRadius.circular(22),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x26000000),
+          blurRadius: 14,
+          offset: Offset(0, 5),
+        ),
+      ],
+    ),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(10, 7, 8, 7),
+      child: Row(
+        children: [
+          Expanded(
+            child: Wrap(
+              spacing: 5,
+              children: List.generate(
+                roomCount,
+                (index) => Semantics(
+                  button: true,
+                  selected: index == currentIndex,
+                  label: '${index + 1}번째 성장 공간',
+                  child: InkWell(
+                    onTap: () => onSelectRoom(index),
+                    borderRadius: BorderRadius.circular(20),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 220),
+                      width: index == currentIndex ? 22 : 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: index == currentIndex
+                            ? const Color(0xffd8f2cf)
+                            : const Color(0x88ffffff),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          FilledButton.tonalIcon(
+            style: FilledButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              backgroundColor: const Color(0xffeef9e9),
+              foregroundColor: const Color(0xff1d6f3c),
+            ),
+            onPressed: onDecorate,
+            icon: const Icon(Icons.chair_alt_outlined, size: 16),
+            label: const Text(
+              '꾸미기',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _AvatarQualitySheet extends StatelessWidget {
+  const _AvatarQualitySheet({
+    required this.currentRoom,
+    required this.reports,
+    required this.performance,
+    required this.onResetPerformance,
+  });
+
+  final AvatarRoom currentRoom;
+  final List<AvatarQualityReport> reports;
+  final AvatarPerformanceSnapshot performance;
+  final VoidCallback onResetPerformance;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = reports.firstWhere(
+      (report) => report.roomId == currentRoom.id,
+    );
+    final suiteScore =
+        reports.fold<int>(0, (sum, report) => sum + report.overall) ~/
+        reports.length;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      '아바타 공간 QC',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  _QualityBadge(score: suiteScore),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '6개 공간 통합 점수 $suiteScore점 · 현재 ${currentRoom.label} ${current.overall}점',
+                style: const TextStyle(color: Color(0xff607367)),
+              ),
+              const SizedBox(height: 18),
+              _QualityBar(label: '공간 좌표', score: current.spatialScore),
+              _QualityBar(label: '상호작용', score: current.interactionScore),
+              _QualityBar(label: '성장 연결', score: current.growthScore),
+              _QualityBar(label: '접근성', score: current.accessibilityScore),
+              _QualityBar(label: '구성 성능', score: current.performanceScore),
+              const SizedBox(height: 14),
+              const Text(
+                'Critic 메모',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 7),
+              if (current.issues.isEmpty)
+                const Text('치명적인 구조 문제는 없어요. 실제 화면의 밀도와 움직임을 확인하세요.')
+              else
+                for (final issue in current.issues.take(4))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          issue.level == AvatarQualityLevel.fail
+                              ? Icons.error_outline
+                              : Icons.info_outline,
+                          size: 17,
+                          color: issue.level == AvatarQualityLevel.fail
+                              ? const Color(0xffb94a48)
+                              : const Color(0xff9a741c),
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(child: Text(issue.message)),
+                      ],
+                    ),
+                  ),
+              const Divider(height: 28),
+              const Text(
+                '실행 성능',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                performance.frameCount == 0
+                    ? '아직 측정 프레임이 없어요. 방을 넘기고 캐릭터를 움직여 보세요.'
+                    : '${performance.frameCount}프레임 · 큰 끊김 ${(performance.jankRate * 100).toStringAsFixed(1)}% · P90 ${performance.p90TotalMs.toStringAsFixed(1)}ms\n평균 Build ${performance.averageBuildMs.toStringAsFixed(1)}ms / Raster ${performance.averageRasterMs.toStringAsFixed(1)}ms',
+              ),
+              if (performance.frameCount >= 30) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color:
+                        performance.jankRate <= .05 &&
+                            performance.p90TotalMs <= 24
+                        ? const Color(0xffe7f5e2)
+                        : const Color(0xfffff1cf),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    performance.jankRate <= .05 &&
+                            performance.p90TotalMs <= 24
+                        ? '프레임 안정성 합격 · 큰 끊김 5% 이하, P90 24ms 이하예요.'
+                        : '성능 확인 필요 · Profile 빌드에서 큰 끊김 5% 또는 P90 24ms를 넘으면 장면 요소와 애니메이션을 줄여 주세요.',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+              if (kDebugMode)
+                const Padding(
+                  padding: EdgeInsets.only(top: 7),
+                  child: Text(
+                    '현재는 디버그 측정입니다. 최종 성능 판정은 Profile 빌드 값을 사용하세요.',
+                    style: TextStyle(fontSize: 11, color: Color(0xff69726c)),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: onResetPerformance,
+                icon: const Icon(Icons.restart_alt_rounded),
+                label: const Text('성능 측정 다시 시작'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QualityBadge extends StatelessWidget {
+  const _QualityBadge({required this.score});
+  final int score;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+    decoration: BoxDecoration(
+      color: score >= 90 ? const Color(0xffe1f4dc) : const Color(0xffffefbd),
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: Text('$score점', style: const TextStyle(fontWeight: FontWeight.w900)),
+  );
+}
+
+class _QualityBar extends StatelessWidget {
+  const _QualityBar({required this.label, required this.score});
+  final String label;
+  final int score;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 9),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 68,
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: LinearProgressIndicator(
+              minHeight: 8,
+              value: score / 100,
+              backgroundColor: const Color(0xffedf0ea),
+              color: score >= 90
+                  ? const Color(0xff4d9e62)
+                  : const Color(0xffd5a534),
+            ),
+          ),
+        ),
+        const SizedBox(width: 9),
+        SizedBox(width: 28, child: Text('$score')),
+      ],
+    ),
+  );
 }
 
 class _FixedObjectHotspot extends StatelessWidget {
   const _FixedObjectHotspot({
     required this.object,
     required this.size,
+    required this.active,
     required this.onTap,
   });
   final RoomObject object;
   final Size size;
+  final bool active;
   final VoidCallback onTap;
 
   @override
@@ -602,10 +1096,20 @@ class _FixedObjectHotspot extends StatelessWidget {
       child: Semantics(
         button: true,
         label: '${object.name}과 상호작용',
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          splashColor: const Color(0x443e9657),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 240),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: active
+                ? Border.all(color: const Color(0xff57a66a), width: 2)
+                : null,
+            color: active ? const Color(0x2257a66a) : Colors.transparent,
+          ),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(16),
+            splashColor: const Color(0x443e9657),
+          ),
         ),
       ),
     );
@@ -642,7 +1146,7 @@ class _AcquiredObject extends StatelessWidget {
   );
 }
 
-class _AvatarSprite extends StatelessWidget {
+class _AvatarSprite extends StatefulWidget {
   const _AvatarSprite({
     required this.pose,
     required this.moving,
@@ -661,64 +1165,101 @@ class _AvatarSprite extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: motion,
-    builder: (context, _) {
-      // All states share a normalized 360x600 canvas, bottom-center ground
-      // anchor and a single runtime scale. No direction/state correction.
-      const runtimeScale = AvatarCharacterMetrics.runtimeScale;
-      return Transform.scale(
-        scale: runtimeScale,
-        alignment: AvatarCharacterMetrics.groundAnchor,
-        child: GestureDetector(
-          onTap: onTap,
+  State<_AvatarSprite> createState() => _AvatarSpriteState();
+}
+
+class _AvatarSpriteState extends State<_AvatarSprite> {
+  int _walkFrame = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.motion.addListener(_updateWalkFrame);
+  }
+
+  @override
+  void didUpdateWidget(covariant _AvatarSprite oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.motion != widget.motion) {
+      oldWidget.motion.removeListener(_updateWalkFrame);
+      widget.motion.addListener(_updateWalkFrame);
+    }
+    if (!widget.moving && _walkFrame != 1) {
+      _walkFrame = 1;
+    }
+  }
+
+  void _updateWalkFrame() {
+    if (!widget.moving) return;
+    final next = (widget.motion.value * 4).floor().clamp(0, 3);
+    if (next != _walkFrame && mounted) {
+      setState(() => _walkFrame = next);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.motion.removeListener(_updateWalkFrame);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The sprite now rebuilds only when its discrete walking frame changes,
+    // rather than on every display refresh. This keeps the living-room motion
+    // while avoiding continuous atlas rasterization.
+    const runtimeScale = AvatarCharacterMetrics.runtimeScale;
+    return Transform.scale(
+      scale: runtimeScale,
+      alignment: AvatarCharacterMetrics.groundAnchor,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: RepaintBoundary(
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.bottomCenter,
             children: [
               Positioned.fill(
-                child: interactionAnimation != null && !moving
-                    ? _InteractionCell(animation: interactionAnimation!)
-                    : equipped['top'] == 'avatar_top_01' &&
-                          pose == _AvatarPose.front &&
-                          !moving
+                child: widget.interactionAnimation != null && !widget.moving
+                    ? _InteractionCell(animation: widget.interactionAnimation!)
+                    : widget.equipped['top'] == 'avatar_top_01' &&
+                          widget.pose == _AvatarPose.front &&
+                          !widget.moving
                     ? Image.asset(
                         'assets/avatars/normalized/avatar_blue_top.png',
                         fit: BoxFit.fill,
                         alignment: AvatarCharacterMetrics.groundAnchor,
                       )
                     : _MotionCell(
-                        pose: pose,
-                        walkFrame: moving
-                            ? (motion.value * 4).floor().clamp(0, 3)
-                            : 1,
-                        walking: moving,
+                        pose: widget.pose,
+                        walkFrame: widget.moving ? _walkFrame : 1,
+                        walking: widget.moving,
                       ),
               ),
-              if (equipped['hat'] != null)
+              if (widget.equipped['hat'] != null)
                 Positioned(
                   top: 1,
                   child: AvatarRewardItemSprite(
-                    itemId: equipped['hat']!,
+                    itemId: widget.equipped['hat']!,
                     size: 42,
                   ),
                 ),
-              if (equipped['accessory'] != null)
+              if (widget.equipped['accessory'] != null)
                 Positioned(
                   right: 1,
                   bottom: 30,
                   child: AvatarRewardItemSprite(
-                    itemId: equipped['accessory']!,
+                    itemId: widget.equipped['accessory']!,
                     size: 36,
                   ),
                 ),
-              if (_feedbackIcon(interactionAnimation) case final icon?)
+              if (_feedbackIcon(widget.interactionAnimation) case final icon?)
                 Positioned(
                   right: 8,
                   top: 42,
                   child: Text(icon, style: const TextStyle(fontSize: 24)),
                 ),
-              if (bubble != null)
+              if (widget.bubble != null)
                 Positioned(
                   top: -38,
                   child: Container(
@@ -732,7 +1273,7 @@ class _AvatarSprite extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Text(
-                      bubble!,
+                      widget.bubble!,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 10,
@@ -744,9 +1285,9 @@ class _AvatarSprite extends StatelessWidget {
             ],
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 
   String? _feedbackIcon(String? animation) => switch (animation) {
     'wash_hands' || 'wash_hair' || 'take_shower' => '🫧',

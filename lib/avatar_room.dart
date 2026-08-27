@@ -820,8 +820,8 @@ const avatarRooms = <AvatarRoom>[
         visualLayer: RoomVisualLayer.back,
         anchor: RoomObjectAnchor.wallCenter,
         relatedActionIds: {'T-06'},
-        hitWidth: 9,
-        hitHeight: 8,
+        hitWidth: 14,
+        hitHeight: 14,
       ),
       RoomObject(
         id: 'toilet_paper_holder',
@@ -836,8 +836,8 @@ const avatarRooms = <AvatarRoom>[
         visualLayer: RoomVisualLayer.back,
         anchor: RoomObjectAnchor.wallCenter,
         relatedActionIds: {'T-05'},
-        hitWidth: 10,
-        hitHeight: 9,
+        hitWidth: 14,
+        hitHeight: 14,
       ),
     ],
     slots: [
